@@ -1333,7 +1333,7 @@ impl App {
 
         egui::Panel::left("props")
             .resizable(true)
-            .default_size(180.0)
+            .default_size(210.0)
             .show(ui, |ui| {
                 ui.add_space(4.0);
                 ui.vertical(|ui| {
@@ -2820,11 +2820,15 @@ fn dim_background(ctx: &egui::Context) {
 
 fn setup_fonts(ctx: &egui::Context) {
     let mut fonts = egui::FontDefinitions::default();
-    // Prefer .ttf; .ttc collections are parsed less reliably by egui.
+    // Prefer a BOLDER CJK face (hei/bold) so the UI text reads heavier and
+    // clearer. It becomes the PRIMARY Proportional font; Monospace keeps its
+    // own width so the editor's line numbers / column alignment stay correct
+    // (the CJK face is only a fallback there for CJK glyphs).
     let candidates = [
+        "C:\\Windows\\Fonts\\simhei.ttf",
+        "C:\\Windows\\Fonts\\msyhbd.ttc",
         "C:\\Windows\\Fonts\\msyh.ttf",
         "C:\\Windows\\Fonts\\msjh.ttf",
-        "C:\\Windows\\Fonts\\simhei.ttf",
         "C:\\Windows\\Fonts\\msyh.ttc",
         "C:\\Windows\\Fonts\\simsun.ttc",
     ];
@@ -2833,13 +2837,16 @@ fn setup_fonts(ctx: &egui::Context) {
             fonts
                 .font_data
                 .insert("cjk".to_string(), egui::FontData::from_owned(bytes).into());
-            for family in [egui::FontFamily::Proportional, egui::FontFamily::Monospace] {
-                fonts
-                    .families
-                    .entry(family)
-                    .or_default()
-                    .push("cjk".to_string());
-            }
+            fonts
+                .families
+                .entry(egui::FontFamily::Proportional)
+                .or_default()
+                .insert(0, "cjk".to_string());
+            fonts
+                .families
+                .entry(egui::FontFamily::Monospace)
+                .or_default()
+                .push("cjk".to_string());
             break;
         }
     }
