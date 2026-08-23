@@ -241,6 +241,7 @@ mod tests {
             suppress_rename: false,
             search: String::new(),
             find_open: false,
+            match_case: false,
             pending_cursor: None,
             scroll_offset: None,
         });
@@ -387,6 +388,7 @@ mod tests {
             suppress_rename: false,
             search: String::new(),
             find_open: false,
+            match_case: false,
             pending_cursor: None,
             scroll_offset: None,
         });
@@ -440,19 +442,19 @@ mod tests {
 
         let (text, m) = {
             let e = harness.state().editor.as_ref().unwrap();
-            (e.text.clone(), find_matches(&e.text, &e.search))
+            (e.text.clone(), find_matches(&e.text, &e.search, false))
         };
         assert_eq!(m.len(), 2, "expected 2 matches for 'zzz', got {:?}", m.len());
 
         // CJK needles must also find matches (the old ASCII-only guard made
         // searching Chinese text impossible — "无法搜索").
-        let cjk = find_matches(&text, "汉字");
+        let cjk = find_matches(&text, "汉字", false);
         assert!(
             cjk.len() >= 1,
             "CJK search must find matches (got {cjk:?})"
         );
 
-        // Enter jumps to the next match (cursor moves onto a match).
+        // Enter jumps to the first match.
         harness.input_mut().events.push(egui::Event::Key {
             key: egui::Key::Enter,
             physical_key: None,
@@ -464,21 +466,61 @@ mod tests {
         harness.step();
         let app = harness.state();
         let cur = app.editor_cursor_byte.unwrap_or(0);
-        assert!(
-            m.iter().any(|(s, _)| *s == cur),
-            "cursor did not land on a match (cursor={cur}, matches={m:?})"
+        assert_eq!(
+            cur, m[0].0,
+            "Enter must land on the first match (cursor={cur}, expected {})",
+            m[0].0
         );
-        eprintln!("find flow ok: search={search} matches={} cursor={cur}", m.len());
 
-        // Clicking ▼ must advance to the NEXT match.
-        harness.get_by_label("▼").click();
+        // Enter AGAIN (focus is now on the editor) must jump to the NEXT
+        // match — and must NOT insert a newline into the code.
+        let text_len_before = harness.state().editor.as_ref().unwrap().text.len();
+        harness.input_mut().events.push(egui::Event::Key {
+            key: egui::Key::Enter,
+            physical_key: None,
+            pressed: true,
+            repeat: false,
+            modifiers: egui::Modifiers::NONE,
+        });
         harness.step();
         harness.step();
         let cur2 = harness.state().editor_cursor_byte.unwrap_or(0);
-        assert!(
-            cur2 == m[1].0,
-            "▼ did not advance to the next match (cur={cur}, cur2={cur2}, expected {})",
+        assert_eq!(
+            cur2, m[1].0,
+            "second Enter must advance to the next match (cur2={cur2}, expected {})",
             m[1].0
+        );
+        let text_len_after = harness.state().editor.as_ref().unwrap().text.len();
+        assert_eq!(
+            text_len_before, text_len_after,
+            "Enter while the find bar is open must not insert a newline"
+        );
+        eprintln!(
+            "find flow ok: search={search} matches={} cursor={cur}/{cur2}",
+            m.len()
+        );
+
+        // A THIRD Enter must wrap around to the first match (next_match
+        // wraps) — still without touching the editor text.
+        harness.input_mut().events.push(egui::Event::Key {
+            key: egui::Key::Enter,
+            physical_key: None,
+            pressed: true,
+            repeat: false,
+            modifiers: egui::Modifiers::NONE,
+        });
+        harness.step();
+        harness.step();
+        let text_len_after3 = harness.state().editor.as_ref().unwrap().text.len();
+        assert_eq!(
+            text_len_before, text_len_after3,
+            "Enter while the find bar is open must never insert a newline"
+        );
+        let cur3 = harness.state().editor_cursor_byte.unwrap_or(0);
+        assert_eq!(
+            cur3, m[0].0,
+            "third Enter must wrap to the first match (cur3={cur3}, expected {})",
+            m[0].0
         );
     }
 
@@ -530,6 +572,7 @@ mod tests {
             suppress_rename: false,
             search: "zzz".to_string(),
             find_open: true,
+            match_case: false,
             pending_cursor: None,
             scroll_offset: None,
         });
@@ -708,6 +751,7 @@ pub struct EditorState {
     pub suppress_rename: bool,
     pub search: String,
     pub find_open: bool,
+    pub match_case: bool,
     pub pending_cursor: Option<usize>,
     pub scroll_offset: Option<f32>,
 }
@@ -944,7 +988,6 @@ impl App {
     }
 
     fn load_vanilla(&mut self, name: &str) {
-        let ui_lang = self.ui_lang;
         match util::find_file(&format!("Actor/Pack/{name}.sbactorpack")) {
             Ok(found) => {
                 let source = match found {
@@ -1095,7 +1138,6 @@ impl App {
     }
 
     fn update_actor_link(&mut self, link: &str, linkref: &str, try_retrieve: bool) -> bool {
-        let ui_lang = self.ui_lang;
         let Some(actor) = self.actor.as_mut() else {
             return false;
         };
@@ -1161,6 +1203,25 @@ impl App {
             if let Some(e) = self.editor.as_mut() {
                 e.find_open = false;
                 e.search.clear();
+            }
+        }
+        // While the find bar is open, Enter must ALWAYS mean "next match" —
+        // even when focus moved to the editor after a jump. Otherwise the
+        // next Enter press inserts a newline into the code (the editor's
+        // TextEdit has focus). Consume the event BEFORE any widget sees it,
+        // and perform the jump ourselves (only when the find input is NOT
+        // focused; when it is, the find bar's own Enter handler does it).
+        if self.editor.as_ref().map(|e| e.find_open).unwrap_or(false) {
+            let find_has_focus = ctx.memory(|m| m.focused() == Some(egui::Id::new("find_input")));
+            if !find_has_focus && ctx.input(|i| i.key_pressed(Key::Enter)) {
+                ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, Key::Enter));
+                if let Some(e) = self.editor.as_mut() {
+                    let m = find_matches(&e.text, &e.search, e.match_case);
+                    let cur = self.editor_cursor_byte.unwrap_or(0);
+                    if let Some((s, _)) = next_match(&m, cur, true) {
+                        e.pending_cursor = Some(s);
+                    }
+                }
             }
         }
 
@@ -1239,7 +1300,7 @@ impl App {
                 ui.vertical(|ui| {
                     for (i, tab) in TABS.iter().enumerate() {
                         let enabled = self.tab_enabled(i);
-                        let mut text = RichText::new(*tab);
+                        let mut text = RichText::new(ty(ui_lang, tab));
                         if !enabled {
                             text = text.weak();
                         }
@@ -1568,6 +1629,7 @@ impl App {
                 suppress_rename: false,
                 search: String::new(),
                 find_open: false,
+                match_case: false,
                 pending_cursor: None,
                 scroll_offset: None,
             });
@@ -1594,7 +1656,7 @@ impl App {
                 None => return,
             };
             if editor.find_open {
-                let matches = find_matches(&editor.text, &editor.search);
+                let matches = find_matches(&editor.text, &editor.search, editor.match_case);
                 let cur = self.editor_cursor_byte.unwrap_or(0);
                 let idx = matches
                     .iter()
@@ -1637,6 +1699,13 @@ impl App {
                                     resp.request_focus();
                                     self.find_focus_pending = false;
                                 }
+                                if ui
+                                    .selectable_label(editor.match_case, "Aa")
+                                    .on_hover_text(ty(ui_lang, "Match Case"))
+                                    .clicked()
+                                {
+                                    editor.match_case = !editor.match_case;
+                                }
                                 ui.label(format!(
                                     "{idx}/{}",
                                     matches.len()
@@ -1664,6 +1733,7 @@ impl App {
                                         find_matches(
                                             &editor.text,
                                             &editor.search,
+                                            editor.match_case,
                                         );
                                     let cur = self.editor_cursor_byte.unwrap_or(0);
                                     if let Some((s, _)) =
@@ -1688,11 +1758,7 @@ impl App {
         };
         // VS-Code-style editor widget (line numbers + syntax highlighting +
         // its own scrolling, so caret/click mapping stays consistent).
-        let theme = egui_code_editor::DEFAULT_THEMES
-            .iter()
-            .find(|t| t.is_dark() == self.settings.dark_theme)
-            .cloned()
-            .unwrap_or_else(|| egui_code_editor::ColorTheme::default());
+        let theme = editor_theme(self.settings.dark_theme);
         let mut code_editor = egui_code_editor::CodeEditor::default()
             .id_source("aamp_editor")
             .with_rows(30)
@@ -1743,7 +1809,7 @@ impl App {
         // the found text is visible even when the match is not under the
         // caret.
         if !editor.search.is_empty() && self.editor_cursor_byte.is_some() {
-            let m = find_matches(&editor.text, &editor.search);
+            let m = find_matches(&editor.text, &editor.search, editor.match_case);
             if !m.is_empty() {
                 let cur = self.editor_cursor_byte.unwrap_or(0);
                 let cur_i = m
@@ -2128,6 +2194,47 @@ fn next_match(matches: &[(usize, usize)], cur: usize, forward: bool) -> Option<(
     }
 }
 
+/// Editor color theme tuned to match the egui visuals of this app (the
+/// default dark theme is AYU_MIRAGE — dark BLUE background with an ORANGE
+/// selection, which clashed with the window's palette).
+fn editor_theme(dark: bool) -> egui_code_editor::ColorTheme {
+    if dark {
+        egui_code_editor::ColorTheme {
+            name: "botw-dark",
+            dark: true,
+            bg: "1b1b1b",          // egui dark panel_fill
+            cursor: "ffffff",
+            selection: "005c80",   // egui default dark selection blue
+            comments: "6a9955",
+            functions: "dcdcaa",
+            keywords: "569cd6",
+            literals: "d4d4d4",
+            numerics: "b5cea8",
+            punctuation: "d4d4d4",
+            strs: "ce9178",
+            types: "4ec9b0",
+            special: "d4d4d4",
+        }
+    } else {
+        egui_code_editor::ColorTheme {
+            name: "botw-light",
+            dark: false,
+            bg: "f8f8f8",          // egui light panel_fill
+            cursor: "000000",
+            selection: "005c80",   // egui default selection blue
+            comments: "008000",
+            functions: "795e26",
+            keywords: "0000ff",
+            literals: "24292f",
+            numerics: "098658",
+            punctuation: "24292f",
+            strs: "a31515",
+            types: "267f99",
+            special: "a475f9",
+        }
+    }
+}
+
 /// Localized string lookup without borrowing self (usable inside closures
 /// that already hold a borrow of another field).
 fn ty(lang: crate::i18n::UiLang, key: &str) -> &str {
@@ -2153,13 +2260,14 @@ pub static YAML_SYNTAX: std::sync::LazyLock<egui_code_editor::Syntax> =
             ]))
     });
 
-/// Case-insensitive find of `needle` in `haystack`, returning byte ranges of
-/// all occurrences. ASCII needles use a fast byte scan (ranges always land on
-/// char boundaries because ASCII bytes can never alias a UTF-8 lead byte);
-/// non-ASCII needles (CJK, accented text) are matched exactly, char by char,
-/// producing char-boundary byte ranges — the old ASCII-only guard made
-/// searching Chinese/Japanese text impossible.
-pub fn find_matches(haystack: &str, needle: &str) -> Vec<(usize, usize)> {
+/// Case-insensitive (or, when `case_sensitive`, exact) find of `needle` in
+/// `haystack`, returning byte ranges of all occurrences. ASCII needles use a
+/// fast byte scan (ranges always land on char boundaries because ASCII bytes
+/// can never alias a UTF-8 lead byte); non-ASCII needles (CJK, accented
+/// text) are matched exactly, char by char, producing char-boundary byte
+/// ranges — the old ASCII-only guard made searching Chinese/Japanese text
+/// impossible.
+pub fn find_matches(haystack: &str, needle: &str, case_sensitive: bool) -> Vec<(usize, usize)> {
     let mut out = Vec::new();
     if needle.is_empty() || needle.len() > haystack.len() {
         return out;
@@ -2169,7 +2277,12 @@ pub fn find_matches(haystack: &str, needle: &str) -> Vec<(usize, usize)> {
         let h = haystack.as_bytes();
         let mut i = 0;
         while i + n.len() <= h.len() {
-            if h[i..i + n.len()].eq_ignore_ascii_case(n) {
+            let hit = if case_sensitive {
+                &h[i..i + n.len()] == n
+            } else {
+                h[i..i + n.len()].eq_ignore_ascii_case(n)
+            };
+            if hit {
                 out.push((i, i + n.len()));
                 i += n.len();
             } else {
@@ -2215,8 +2328,10 @@ fn paint_match_highlights(
     current: usize,
 ) {
     let painter = ui.painter().with_clip_rect(clip);
-    let base = Color32::from_rgba_unmultiplied(255, 190, 40, 40);
-    let cur_color = Color32::from_rgba_unmultiplied(255, 140, 0, 110);
+    // Blue-tinted match highlights (like a code editor's search): subtle for
+    // all matches, stronger for the current one.
+    let base = Color32::from_rgba_unmultiplied(0, 120, 220, 40);
+    let cur_color = Color32::from_rgba_unmultiplied(0, 155, 255, 100);
     for (i, (bs, be)) in matches.iter().enumerate() {
         let bs = (*bs).min(text.len());
         let be = (*be).min(text.len());
