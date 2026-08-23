@@ -160,6 +160,19 @@ pub fn tr(lang: UiLang, key: &str) -> &str {
         "from actor link tags" => "来源：Actor Link 标签",
         "from save rules" => "来源：保存规则",
         "extracted from link files" => "来源：从链接文件提取",
+        // Flags editor page
+        "Bootup.pack not found. Set Game/Update dirs in Settings." => {
+            "未找到 Bootup.pack，请在设置中设置 Game/Update 目录。"
+        }
+        "Failed to load flags: " => "加载标志失败：",
+        "Flags for this actor" => "该 Actor 的标志",
+        "Name" => "名称",
+        "Value" => "值",
+        "Reload" => "重新加载",
+        "Add flag:" => "添加标志：",
+        "Add" => "添加",
+        "Del" => "删除",
+        "No flags found for this actor." => "未找到该 Actor 的标志。",
         // Misc messages
         "No actor loaded. Use File → Open Vanilla Actor or Open Mod Actor." => {
             "未加载 Actor。使用 文件 → 打开原始 Actor 或 打开 Mod Actor。"

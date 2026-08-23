@@ -40,6 +40,7 @@ mod tests {
             editor: None,
             texts_panel: None,
             info_panel: None,
+            flags_panel: None,
             actor_select: None,
             settings_panel: None,
             save_dir_request: false,
@@ -123,6 +124,7 @@ mod tests {
             editor: None,
             texts_panel: None,
             info_panel: None,
+            flags_panel: None,
             actor_select: None,
             settings_panel: None,
             save_dir_request: false,
@@ -218,6 +220,7 @@ mod tests {
             editor: None,
             texts_panel: None,
             info_panel: None,
+            flags_panel: None,
             actor_select: None,
             settings_panel: None,
             save_dir_request: false,
@@ -368,6 +371,7 @@ mod tests {
             editor: None,
             texts_panel: None,
             info_panel: None,
+            flags_panel: None,
             actor_select: None,
             settings_panel: None,
             save_dir_request: false,
@@ -554,6 +558,7 @@ mod tests {
             editor: None,
             texts_panel: None,
             info_panel: None,
+            flags_panel: None,
             actor_select: None,
             settings_panel: None,
             save_dir_request: false,
@@ -773,6 +778,15 @@ pub struct InfoPanelState {
     pub keep_extra: bool,
 }
 
+/// Flags editor page state (the "add flag" form fields).
+#[derive(Default)]
+pub struct FlagsPanelState {
+    pub name: String,
+    pub ftype: String,
+    pub bool_on: bool,
+    pub s32: i32,
+}
+
 pub struct TextsPanelState {
     pub base_name_on: bool,
     pub base_name: String,
@@ -890,6 +904,7 @@ pub struct App {
     pub editor: Option<EditorState>,
     pub texts_panel: Option<TextsPanelState>,
     pub info_panel: Option<InfoPanelState>,
+    pub flags_panel: Option<FlagsPanelState>,
     pub actor_select: Option<ActorSelectState>,
     pub settings_panel: Option<SettingsPanelState>,
     pub save_dir_request: bool,
@@ -919,6 +934,7 @@ impl App {
             editor: None,
             texts_panel: None,
             info_panel: None,
+            flags_panel: None,
             actor_select: None,
             settings_panel: None,
             save_dir_request: false,
@@ -986,6 +1002,7 @@ impl App {
         self.editor = None;
         self.texts_panel = None;
         self.info_panel = None;
+        self.flags_panel = None;
         let name = self.actor.as_ref().map(|a| a.get_name()).unwrap_or_default();
         self.link_panel = self.actor.as_ref().map(LinkPanelState::new);
         if self.actor.is_some() {
@@ -1473,9 +1490,7 @@ impl App {
             0 => self.show_actor_link(ui),
             25 => self.show_texts(ui),
             26 => self.show_actor_info(ui),
-            27 => {
-                ui.label(ty(ui_lang, "The Flags tab is not implemented yet (same as the original tool)."));
-            }
+            27 => self.show_flags(ui),
             i => match LINK_TO_TAB.iter().find(|(t, _)| *t == i) {
                 Some((_, link)) if NOT_IMPLEMENTED.contains(link) => {
                     ui.label(format!(
@@ -2041,6 +2056,173 @@ impl App {
         }
     }
 
+    /// Locate `Pack/Bootup.pack` (game dir, then update dir), for flags.
+    fn bootup_path(&self) -> Option<PathBuf> {
+        for base in [&self.settings.game_dir, &self.settings.update_dir] {
+            if base.is_empty() {
+                continue;
+            }
+            let p = PathBuf::from(base).join("Pack").join("Bootup.pack");
+            if p.exists() {
+                return Some(p);
+            }
+        }
+        util::find_file("Pack/Bootup.pack")
+            .ok()
+            .and_then(|f| match f {
+                util::FoundFile::Path(p) => Some(p),
+                _ => None,
+            })
+    }
+
+    /// Flags editor: lists the GameData flags (bool/s32) whose name contains
+    /// the actor name, lets the user edit values, add new flags, or delete
+    /// ones. Edits mutate `actor.flags` and are written back on save.
+    fn show_flags(&mut self, ui: &mut egui::Ui) {
+        let ui_lang = self.ui_lang;
+        let Some(bootup) = self.bootup_path() else {
+            ui.label(ty(
+                ui_lang,
+                "Bootup.pack not found. Set Game/Update dirs in Settings.",
+            ));
+            return;
+        };
+        let Some(actor) = self.actor.as_mut() else {
+            return;
+        };
+        if self.flags_panel.is_none() {
+            self.flags_panel = Some(FlagsPanelState::default());
+        }
+        let name = actor.get_name();
+        if let Err(e) = actor.ensure_flags_loaded(&bootup) {
+            ui.label(format!("{}{}", ty(ui_lang, "Failed to load flags: "), e));
+            return;
+        }
+
+        // Snapshot the actor-relevant flags (edits are applied below).
+        let mut list: Vec<(&'static str, crate::flag::Flag)> = Vec::new();
+        for ftype in ["bool_data", "s32_data"] {
+            for f in actor.flags.find_all(ftype, &name) {
+                list.push((ftype, f.clone()));
+            }
+        }
+        list.sort_by(|a, b| (a.0, &a.1.data_name).cmp(&(b.0, &b.1.data_name)));
+
+        let mut updates: Vec<(&'static str, crate::flag::Flag)> = Vec::new();
+        let mut deletes: Vec<(&'static str, i32)> = Vec::new();
+        let mut do_add = false;
+        let mut reload = false;
+
+        ui.horizontal(|ui| {
+            ui.label(RichText::new(ty(ui_lang, "Flags for this actor")).strong());
+            ui.label(
+                RichText::new(format!("{}: {}", ty(ui_lang, "Name"), name)).small(),
+            );
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                if ui.button(ty(ui_lang, "Reload")).clicked() {
+                    reload = true;
+                }
+            });
+        });
+        ui.separator();
+
+        // Add-flag form.
+        let panel = self.flags_panel.as_mut().unwrap();
+        ui.horizontal(|ui| {
+            ui.label(ty(ui_lang, "Add flag:"));
+            ui.add(
+                egui::TextEdit::singleline(&mut panel.name)
+                    .desired_width(160.0)
+                    .hint_text(ty(ui_lang, "Name")),
+            );
+            let mut is_s32 = panel.ftype == "s32_data";
+            if ui
+                .selectable_label(is_s32, ty(ui_lang, "s32_data"))
+                .clicked()
+            {
+                is_s32 = true;
+            }
+            if ui
+                .selectable_label(!is_s32, ty(ui_lang, "bool_data"))
+                .clicked()
+            {
+                is_s32 = false;
+            }
+            panel.ftype = if is_s32 { "s32_data".into() } else { "bool_data".into() };
+            if is_s32 {
+                ui.add(egui::DragValue::new(&mut panel.s32));
+            } else {
+                ui.checkbox(&mut panel.bool_on, ty(ui_lang, "Value"));
+            }
+            if ui.button(ty(ui_lang, "Add")).clicked() {
+                do_add = true;
+            }
+        });
+        ui.separator();
+
+        egui::ScrollArea::vertical().show(ui, |ui| {
+            if list.is_empty() {
+                ui.label(ty(ui_lang, "No flags found for this actor."));
+            }
+            for (ftype, f) in &list {
+                ui.horizontal(|ui| {
+                    ui.label(RichText::new(&f.data_name).strong());
+                    ui.label(*ftype);
+                    if matches!(f.kind, crate::flag::FlagKind::Bool { .. }) {
+                        let mut on = flag_bool_on(f);
+                        if ui.checkbox(&mut on, "").changed() {
+                            let mut nf = f.clone();
+                            set_flag_bool(&mut nf, on);
+                            updates.push((ftype, nf));
+                        }
+                    } else if matches!(f.kind, crate::flag::FlagKind::S32 { .. }) {
+                        let mut v = flag_s32(f);
+                        if ui.add(egui::DragValue::new(&mut v)).changed() {
+                            let mut nf = f.clone();
+                            set_flag_s32(&mut nf, v);
+                            updates.push((ftype, nf));
+                        }
+                    } else {
+                        ui.label(RichText::new(flag_display(f)).monospace());
+                    }
+                    if ui.button(ty(ui_lang, "Del")).clicked() {
+                        deletes.push((ftype, f.hash_value));
+                    }
+                });
+            }
+        });
+
+        // Apply the collected edits.
+        for (ftype, flag) in updates {
+            actor.flags.add(ftype, flag);
+        }
+        for (ftype, hash) in deletes {
+            actor.flags.remove(ftype, hash);
+        }
+        if do_add {
+            let nm = panel.name.trim().to_string();
+            if !nm.is_empty() {
+                let ftype = if panel.ftype == "s32_data" { "s32_data" } else { "bool_data" };
+                let mut f = crate::store::new_flag(ftype, false);
+                f.set_data_name(nm);
+                if ftype == "bool_data" {
+                    set_flag_bool(&mut f, panel.bool_on);
+                } else {
+                    set_flag_s32(&mut f, panel.s32);
+                }
+                actor.flags.add(ftype, f);
+                panel.name.clear();
+                panel.s32 = 0;
+                panel.bool_on = false;
+            }
+        }
+        if reload {
+            actor.flags = crate::store::FlagStore::new();
+            actor.flags_loaded = false;
+            let _ = actor.ensure_flags_loaded(&bootup);
+        }
+    }
+
     fn show_actor_select(&mut self, ctx: &egui::Context) {
         let ui_lang = self.ui_lang;
         let Some(state) = &mut self.actor_select else {
@@ -2393,6 +2575,48 @@ fn info_key_hint(key: &str) -> &'static str {
         "tags" => "from actor link tags",
         "bugMask" | "sortKey" => "from save rules",
         _ => "extracted from link files",
+    }
+}
+
+/// Flags helper: is a bool flag currently on?
+fn flag_bool_on(f: &crate::flag::Flag) -> bool {
+    if let crate::flag::FlagKind::Bool { init_value, .. } = &f.kind {
+        *init_value != 0
+    } else {
+        false
+    }
+}
+fn set_flag_bool(f: &mut crate::flag::Flag, on: bool) {
+    if let crate::flag::FlagKind::Bool { init_value, .. } = &mut f.kind {
+        *init_value = if on { 1 } else { 0 };
+    }
+}
+fn flag_s32(f: &crate::flag::Flag) -> i32 {
+    match &f.kind {
+        crate::flag::FlagKind::S32 { init_value, .. } => *init_value,
+        crate::flag::FlagKind::Bool { init_value, .. } => *init_value,
+        _ => 0,
+    }
+}
+fn set_flag_s32(f: &mut crate::flag::Flag, v: i32) {
+    match &mut f.kind {
+        crate::flag::FlagKind::S32 { init_value, .. } => *init_value = v,
+        crate::flag::FlagKind::Bool { init_value, .. } => *init_value = v,
+        _ => {}
+    }
+}
+fn flag_display(f: &crate::flag::Flag) -> String {
+    use crate::flag::FlagKind;
+    match &f.kind {
+        FlagKind::Bool { init_value, .. } => {
+            if *init_value != 0 { "true".to_string() } else { "false".to_string() }
+        }
+        FlagKind::S32 { init_value, .. } => init_value.to_string(),
+        FlagKind::F32 { init_value, .. } => format!("{init_value}"),
+        FlagKind::String { init_value, .. } => init_value.clone(),
+        FlagKind::BoolArray { init_value, .. } => format!("{init_value:?}"),
+        FlagKind::S32Array { init_value, .. } => format!("{init_value:?}"),
+        _ => format!("{:?}", f.kind),
     }
 }
 

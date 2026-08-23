@@ -97,6 +97,8 @@ pub struct BATActor {
     /// Keep old ActorInfo fields that are not in the profile whitelist
     /// (by default the regenerated entry drops them).
     pub info_keep_extra: bool,
+    /// Whether the global GameData flags have been loaded into `flags`.
+    pub flags_loaded: bool,
 }
 
 /// ActorInfo product file loaded as BYML.
@@ -273,6 +275,7 @@ impl BATActor {
             far_origname,
             info_overrides: HashMap::new(),
             info_keep_extra: false,
+            flags_loaded: false,
         };
         actor.set_flags(&actor.origname.clone());
         Ok(actor)
@@ -424,6 +427,27 @@ impl BATActor {
         }
     }
 
+    /// Load the global GameData flags from `bootup_path` into `self.flags`
+    /// (no-overwrite) so the Flags page can list them and edits persist. Runs
+    /// before the first save or when the Flags tab is opened; once loaded, the
+    /// save pipeline skips re-adding them so deleted flags stay deleted.
+    pub fn ensure_flags_loaded(&mut self, bootup_path: &std::path::Path) -> anyhow::Result<()> {
+        if self.flags_loaded {
+            return Ok(());
+        }
+        let gamedata_sarc = util::get_gamedata_sarc(bootup_path)?;
+        for file in gamedata_sarc.files() {
+            if let Ok(byml) = Byml::from_binary(file.data()) {
+                if let Some(m) = byml.as_map().ok() {
+                    let name = file.name().unwrap_or("");
+                    self.flags.add_flags_from_hash_no_overwrite(name, m);
+                }
+            }
+        }
+        self.flags_loaded = true;
+        Ok(())
+    }
+
     /// Save to a mod dir (`content` = big endian, `romfs` = little endian).
     pub fn save(&mut self, root_dir: &Path, be: bool) -> anyhow::Result<()> {
         let pack_bytes = self.pack.get_bytes(be)?;
@@ -572,15 +596,7 @@ impl BATActor {
             let found = util::find_file("Pack/Bootup.pack")?;
             std::fs::write(&bootup_path, found.read_bytes()?)?;
         }
-        let gamedata_sarc = util::get_gamedata_sarc(&bootup_path)?;
-        for file in gamedata_sarc.files() {
-            if let Ok(byml) = Byml::from_binary(file.data()) {
-                if let Some(m) = byml.as_map().ok() {
-                    let name = file.name().unwrap_or("");
-                    self.flags.add_flags_from_hash_no_overwrite(name, m);
-                }
-            }
-        }
+        self.ensure_flags_loaded(&bootup_path)?;
 
         let orig_files = util::get_last_two_savedata_files(&bootup_path)?;
         // The originals YAZ0-compress the generated gamedata/savedata before
