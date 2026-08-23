@@ -977,7 +977,13 @@ impl App {
         } else {
             egui::Theme::Light
         });
-        ctx.set_visuals_of(egui::Theme::Dark, egui::Visuals::dark());
+        // Boost text contrast in dark mode: egui's default dark text color is
+        // a dim gray that reads poorly on the near-black background. Brighter
+        // text + a more vivid link color keep it legible.
+        let mut dark_visuals = egui::Visuals::dark();
+        dark_visuals.override_text_color = Some(Color32::from_gray(235));
+        dark_visuals.hyperlink_color = Color32::from_rgb(130, 200, 255);
+        ctx.set_visuals_of(egui::Theme::Dark, dark_visuals);
         ctx.set_visuals_of(egui::Theme::Light, egui::Visuals::light());
         // Code editor font: bump the Monospace style size for BOTH themes so
         // that TextEdit's row height, the caret math and our highlighted
