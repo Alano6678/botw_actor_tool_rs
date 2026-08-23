@@ -51,6 +51,17 @@ pub fn tr(lang: UiLang, key: &str) -> &str {
         "Find\tCtrl+F" => "查找\tCtrl+F",
         "Settings" => "设置",
         "Settings…" => "设置…",
+        "Help" => "帮助",
+        "About…" => "关于…",
+        "About" => "关于",
+        "Version:" => "版本：",
+        "GitHub:" => "GitHub：",
+        "Original project:" => "原版项目：",
+        "License: AGPL-3.0-or-later" => "许可：AGPL-3.0-or-later",
+        "Close" => "关闭",
+        "A Rust + egui rewrite of the original Python botw_actor_tool for editing Breath of the Wild actor packs." => {
+            "Rust + egui 重写版：原 Python 版 botw_actor_tool 的移植，用于编辑《塞尔达传说：旷野之息》的 Actor 包。"
+        }
         // Status
         "Ready" => "就绪",
         "No actor loaded" => "未加载 Actor",

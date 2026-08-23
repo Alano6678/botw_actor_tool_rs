@@ -42,6 +42,7 @@ mod tests {
             actor_select: None,
             settings_panel: None,
             save_dir_request: false,
+            about_open: false,
             msg: None,
             status: None,
             last_frame_rect: None,
@@ -123,6 +124,7 @@ mod tests {
             actor_select: None,
             settings_panel: None,
             save_dir_request: false,
+            about_open: false,
             msg: None,
             status: None,
             last_frame_rect: None,
@@ -216,6 +218,7 @@ mod tests {
             actor_select: None,
             settings_panel: None,
             save_dir_request: false,
+            about_open: false,
             msg: None,
             status: None,
             last_frame_rect: None,
@@ -591,6 +594,7 @@ pub struct App {
     pub actor_select: Option<ActorSelectState>,
     pub settings_panel: Option<SettingsPanelState>,
     pub save_dir_request: bool,
+    pub about_open: bool,
     pub msg: Option<Msg>,
     pub status: Option<String>,
     pub last_frame_rect: Option<egui::Rect>,
@@ -618,6 +622,7 @@ impl App {
             actor_select: None,
             settings_panel: None,
             save_dir_request: false,
+            about_open: false,
             msg: None,
             status: None,
             last_frame_rect: None,
@@ -959,6 +964,11 @@ impl App {
                         self.settings_panel = Some(SettingsPanelState::new(&self.settings));
                     }
                 });
+                ui.menu_button(ty(ui_lang, "Help"), |ui| {
+                    if ui.button(ty(ui_lang, "About…")).clicked() {
+                        self.about_open = true;
+                    }
+                });
             });
         });
 
@@ -1035,6 +1045,7 @@ impl App {
 
         self.show_actor_select(&ctx);
         self.show_settings(&ctx);
+        self.show_about(&ctx);
         self.show_message(&ctx);
 
         self.last_frame_rect = ctx.input(|i| i.viewport().inner_rect);
@@ -1591,6 +1602,51 @@ impl App {
         }
     }
 
+    /// "About" dialog: project info + GitHub link (Help → About…).
+    fn show_about(&mut self, ctx: &egui::Context) {
+        if !self.about_open {
+            return;
+        }
+        let ui_lang = self.ui_lang;
+        let mut open = self.about_open;
+        egui::Window::new(ty(ui_lang, "About"))
+            .open(&mut open)
+            .collapsible(false)
+            .resizable(false)
+            .anchor(Align2::CENTER_CENTER, [0.0, 0.0])
+            .show(ctx, |ui| {
+                ui.heading("BotW Actor Tool (Rust + egui)");
+                ui.label(format!(
+                    "{} {}",
+                    ty(ui_lang, "Version:"),
+                    env!("CARGO_PKG_VERSION")
+                ));
+                ui.separator();
+                ui.label(ty(ui_lang, ABOUT_DESC));
+                ui.separator();
+                ui.horizontal(|ui| {
+                    ui.label(ty(ui_lang, "GitHub:"));
+                    ui.hyperlink(GITHUB_URL);
+                });
+                ui.horizontal(|ui| {
+                    ui.label(ty(ui_lang, "Original project:"));
+                    ui.hyperlink("https://github.com/GingerAvalanche/botw_actor_tool");
+                });
+                ui.label(ty(ui_lang, "License: AGPL-3.0-or-later"));
+                ui.add_space(6.0);
+                ui.horizontal(|ui| {
+                    if ui.button(ty(ui_lang, "Close")).clicked() {
+                        self.about_open = false;
+                    }
+                });
+            });
+        // Closed either via the title-bar ✕ (egui flips `open`) or the Close
+        // button (we flip `self.about_open`); keep it closed either way.
+        if !open {
+            self.about_open = false;
+        }
+    }
+
     fn show_settings(&mut self, ctx: &egui::Context) {
         let ui_lang = self.ui_lang;
         let Some(mut panel) = self.settings_panel.take() else {
@@ -1795,6 +1851,10 @@ fn next_match(matches: &[(usize, usize)], cur: usize, forward: bool) -> Option<(
 fn ty(lang: crate::i18n::UiLang, key: &str) -> &str {
     crate::i18n::tr(lang, key)
 }
+
+pub const GITHUB_URL: &str = "https://github.com/Alano6678/botw_actor_tool_rs";
+const ABOUT_DESC: &str =
+    "A Rust + egui rewrite of the original Python botw_actor_tool for editing Breath of the Wild actor packs.";
 
 /// YAML syntax config for the code editor widget.
 pub static YAML_SYNTAX: std::sync::LazyLock<egui_code_editor::Syntax> =
