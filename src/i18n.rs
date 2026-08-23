@@ -151,6 +151,8 @@ pub fn tr(lang: UiLang, key: &str) -> &str {
             "保留额外字段（不在 profile 键列表中的旧字段）"
         }
         "auto" => "自动",
+        "extra" => "额外",
+        "extra_hint" => "额外字段：不在该 profile 的键列表中，仅在勾选「保留额外字段」时才会保留。",
         "ActorInfo overrides applied" => "ActorInfo 覆盖已应用",
         "from name" => "来源：Actor 名称",
         "from far variant" => "来源：Far 变体",

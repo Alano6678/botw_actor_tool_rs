@@ -1927,6 +1927,9 @@ impl App {
         let Some(actor) = self.actor.as_mut() else {
             return;
         };
+        // Profile whitelist: extra fields (kept only when the checkbox is on)
+        // are the ones NOT in this list.
+        let allowed = crate::data::keys_for_profile(&actor.get_link("ProfileUser"));
         // Rebuild the preview whenever the actor's info is dirty (e.g. the
         // user edited a link file), keeping the typed overrides. The preview
         // uses the page's CURRENT keep_extra checkbox so that toggling it
@@ -2003,8 +2006,20 @@ impl App {
                     ui.end_row();
                     for i in 0..n {
                         let (key, auto) = panel.entries[i].clone();
-                        ui.label(RichText::new(&key).strong())
-                            .on_hover_text(ty(ui_lang, info_key_hint(&key)));
+                        let is_extra = !allowed.iter().any(|k| k.as_str() == key);
+                        let key_label = if is_extra {
+                            // Mark fields outside the profile whitelist so the
+                            // user knows they would otherwise be dropped.
+                            RichText::new(format!("{} ({})", key, ty(ui_lang, "extra"))).weak()
+                        } else {
+                            RichText::new(&key).strong()
+                        };
+                        let hint = if is_extra {
+                            ty(ui_lang, "extra_hint")
+                        } else {
+                            ty(ui_lang, info_key_hint(&key))
+                        };
+                        ui.label(key_label).on_hover_text(hint);
                         ui.label(RichText::new(&auto).monospace());
                         let val = overrides.entry(key).or_default();
                         ui.add(
