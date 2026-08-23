@@ -469,6 +469,17 @@ mod tests {
             "cursor did not land on a match (cursor={cur}, matches={m:?})"
         );
         eprintln!("find flow ok: search={search} matches={} cursor={cur}", m.len());
+
+        // Clicking ▼ must advance to the NEXT match.
+        harness.get_by_label("▼").click();
+        harness.step();
+        harness.step();
+        let cur2 = harness.state().editor_cursor_byte.unwrap_or(0);
+        assert!(
+            cur2 == m[1].0,
+            "▼ did not advance to the next match (cur={cur}, cur2={cur2}, expected {})",
+            m[1].0
+        );
     }
 
     /// Render the actual UI to a PNG so the find bar's look can be inspected
@@ -541,6 +552,26 @@ mod tests {
         )
         .expect("save");
         eprintln!("saved screenshot: {}", path.display());
+
+        // Click ▼, then screenshot again: the caret must be at the second
+        // match and the highlight (current match) must be visible.
+        harness.get_by_label("▼").click();
+        harness.run_steps(3);
+        let img = harness.render().expect("render2");
+        let path2 = std::env::temp_dir().join("find_bar_next.png");
+        image::save_buffer(
+            &path2,
+            &img,
+            img.width(),
+            img.height(),
+            image::ColorType::Rgba8,
+        )
+        .expect("save2");
+        let cur = harness.state().editor_cursor_byte.unwrap_or(0);
+        eprintln!(
+            "saved screenshot2: {} (cursor={cur})",
+            path2.display()
+        );
     }
 }
 
@@ -1623,7 +1654,7 @@ impl App {
                                 {
                                     cmd = Some(true);
                                 }
-                                if ui.button("✕").clicked() {
+                                if ui.button("×").clicked() {
                                     cmd = None;
                                     editor.find_open = false;
                                     editor.search.clear();
@@ -1639,13 +1670,6 @@ impl App {
                                         next_match(&matches, cur, forward)
                                     {
                                         editor.pending_cursor = Some(s);
-                                        // Move focus to the editor so the
-                                        // caret jumps visibly and CodeEditor
-                                        // scrolls it into view (its inner
-                                        // TextEdit only scrolls when focused).
-                                        if let Some(id) = self.editor_edit_id {
-                                            ctx.memory_mut(|m| m.request_focus(id));
-                                        }
                                     }
                                 }
                             });
@@ -1705,7 +1729,38 @@ impl App {
                     egui::text::CCursor::new(char_idx),
                 )));
             output.state.store(ui.ctx(), output.response.id);
+            // Request focus AFTER the editor was laid out. egui surrenders
+            // focus when the user clicks elsewhere (surrender_focus_on:
+            // Presses) — requesting earlier (in the find bar) is undone by
+            // the editor's own interact in the same frame, which made the
+            // ▼/▲ buttons appear dead.
+            if let Some(id) = self.editor_edit_id {
+                ui.ctx().memory_mut(|m| m.request_focus(id));
+            }
             let _ = jump_scroll;
+        }
+        // Highlight every search match (and the current one more strongly) so
+        // the found text is visible even when the match is not under the
+        // caret.
+        if !editor.search.is_empty() && self.editor_cursor_byte.is_some() {
+            let m = find_matches(&editor.text, &editor.search);
+            if !m.is_empty() {
+                let cur = self.editor_cursor_byte.unwrap_or(0);
+                let cur_i = m
+                    .iter()
+                    .position(|(s, e)| *s <= cur && cur < *e)
+                    .or_else(|| m.iter().position(|(s, _)| *s > cur))
+                    .unwrap_or(0);
+                paint_match_highlights(
+                    ui,
+                    &output.galley,
+                    output.galley_pos,
+                    output.text_clip_rect,
+                    &editor.text,
+                    &m,
+                    cur_i,
+                );
+            }
         }
     }
 
@@ -2144,6 +2199,77 @@ pub fn find_matches(haystack: &str, needle: &str) -> Vec<(usize, usize)> {
         }
     }
     out
+}
+
+/// Paint translucent rectangles over every search match (stronger over the
+/// current one) on top of the laid-out editor text, so the user can SEE what
+/// the find bar found. Rects are derived from the galley the editor laid out
+/// this frame, then translated by `galley_pos` and clipped to the text clip.
+fn paint_match_highlights(
+    ui: &egui::Ui,
+    galley: &egui::text::Galley,
+    galley_pos: egui::Pos2,
+    clip: egui::Rect,
+    text: &str,
+    matches: &[(usize, usize)],
+    current: usize,
+) {
+    let painter = ui.painter().with_clip_rect(clip);
+    let base = Color32::from_rgba_unmultiplied(255, 190, 40, 40);
+    let cur_color = Color32::from_rgba_unmultiplied(255, 140, 0, 110);
+    for (i, (bs, be)) in matches.iter().enumerate() {
+        let bs = (*bs).min(text.len());
+        let be = (*be).min(text.len());
+        if be <= bs {
+            continue;
+        }
+        let cs = text[..bs].chars().count();
+        let ce = text[..be].chars().count();
+        let a = galley
+            .pos_from_cursor(egui::text::CCursor::new(cs))
+            .translate(galley_pos.to_vec2());
+        let b = galley
+            .pos_from_cursor(egui::text::CCursor::new(ce))
+            .translate(galley_pos.to_vec2());
+        let color = if i == current { cur_color } else { base };
+        if (a.min.y - b.min.y).abs() < 0.5 {
+            // Single-line match: one rect from the start boundary to the end
+            // boundary (both are 0-width cursor positions).
+            painter.rect_filled(
+                egui::Rect::from_min_max(
+                    egui::pos2(a.min.x, a.min.y),
+                    egui::pos2(b.max.x, b.max.y),
+                ),
+                2.0,
+                color,
+            );
+        } else {
+            // Multi-line match: first row segment, full middle rows, last row.
+            for row in &galley.rows {
+                let r = row.rect().translate(galley_pos.to_vec2());
+                if r.max.y <= a.min.y + 0.01 || r.min.y >= b.max.y - 0.01 {
+                    continue;
+                }
+                let is_first = r.min.y >= a.min.y - 0.5 && r.min.y <= a.min.y + 0.5;
+                let is_last = r.max.y >= b.max.y - 0.5 && r.max.y <= b.max.y + 0.5;
+                let (x0, x1) = if is_first {
+                    (a.min.x, r.max.x)
+                } else if is_last {
+                    (r.min.x, b.max.x)
+                } else {
+                    (r.min.x, r.max.x)
+                };
+                painter.rect_filled(
+                    egui::Rect::from_min_max(
+                        egui::pos2(x0, r.min.y),
+                        egui::pos2(x1, r.max.y),
+                    ),
+                    2.0,
+                    color,
+                );
+            }
+        }
+    }
 }
 
 fn dim_background(ctx: &egui::Context) {
