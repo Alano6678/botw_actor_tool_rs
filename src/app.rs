@@ -336,6 +336,212 @@ mod tests {
             "pinned light preference must survive the system theme arriving"
         );
     }
+
+    /// Drive the REAL find flow: Ctrl+F opens the bar, typed text lands in
+    /// the search input, the match count picks it up, and Enter/▼ jumps the
+    /// cursor to the next match.
+    #[test]
+    #[ignore]
+    fn real_app_find_flow() {
+        let settings = Settings::load();
+        if settings.update_dir.is_empty() || settings.game_dir.is_empty() {
+            eprintln!("game dirs not configured; skipping");
+            return;
+        }
+        let found = util::find_file("Actor/Pack/Armor_001_Head.sbactorpack").unwrap();
+        let source = match found {
+            FoundFile::Path(p) => PackSource::Path(p),
+            FoundFile::Resident { titlebg, inner } => PackSource::Resident { titlebg, inner },
+        };
+        let actor = BATActor::new(&source).unwrap();
+        // Pre-open the editor with text that contains a known needle twice.
+        let body = actor.get_link_data("GParamUser");
+        let mut app = App {
+            settings,
+            actor: Some(actor),
+            tab: 11, // General Param
+            link_panel: None,
+            editor: None,
+            texts_panel: None,
+            actor_select: None,
+            settings_panel: None,
+            save_dir_request: false,
+            about_open: false,
+            msg: None,
+            status: None,
+            last_frame_rect: None,
+            saving: None,
+            save_armed: false,
+            editor_cursor_byte: None,
+            find_focus_pending: false,
+            editor_edit_id: None,
+            editor_edit_rect: None,
+            ui_lang: crate::i18n::UiLang::En,
+        };
+        // Pre-open the editor with text that contains a known needle twice.
+        app.editor = Some(crate::app::EditorState {
+            link: "GParamUser".to_string(),
+            text: format!("{body}\n# cjk 汉字内容 测试\nneeds: zzz marker\nmore: zzz marker again"),
+            saved_hash: 0,
+            rename_on_edit: false,
+            suppress_rename: false,
+            search: String::new(),
+            find_open: false,
+            pending_cursor: None,
+            scroll_offset: None,
+        });
+        let mut harness =
+            egui_kittest::Harness::new_ui_state(|ui, app: &mut App| {
+                app.root_ui(ui);
+            }, app);
+        harness.run_steps(2);
+
+        // Ctrl+F opens the bar (eframe reports modifier changes via
+        // `Event::ModifiersChanged`, so emulate that like the real integration).
+        harness.input_mut().events.push(egui::Event::ModifiersChanged(
+            egui::Modifiers::COMMAND,
+        ));
+        harness.input_mut().events.push(egui::Event::Key {
+            key: egui::Key::F,
+            physical_key: None,
+            pressed: true,
+            repeat: false,
+            modifiers: egui::Modifiers::COMMAND,
+        });
+        harness.step();
+        harness.input_mut().events.push(egui::Event::ModifiersChanged(
+            egui::Modifiers::NONE,
+        ));
+        assert!(
+            harness
+                .state()
+                .editor
+                .as_ref()
+                .map(|e| e.find_open)
+                .unwrap_or(false),
+            "find bar did not open via Ctrl+F"
+        );
+
+        // One frame so the bar paints and takes focus...
+        harness.step();
+        // ...then typed text must land in the find input.
+        harness
+            .input_mut()
+            .events
+            .push(egui::Event::Text("zzz".to_string()));
+        harness.step();
+        let search = harness
+            .state()
+            .editor
+            .as_ref()
+            .map(|e| e.search.clone())
+            .unwrap_or_default();
+        assert_eq!(search, "zzz", "typed text did not land in the find input");
+
+        let (text, m) = {
+            let e = harness.state().editor.as_ref().unwrap();
+            (e.text.clone(), find_matches(&e.text, &e.search))
+        };
+        assert_eq!(m.len(), 2, "expected 2 matches for 'zzz', got {:?}", m.len());
+
+        // CJK needles must also find matches (the old ASCII-only guard made
+        // searching Chinese text impossible — "无法搜索").
+        let cjk = find_matches(&text, "汉字");
+        assert!(
+            cjk.len() >= 1,
+            "CJK search must find matches (got {cjk:?})"
+        );
+
+        // Enter jumps to the next match (cursor moves onto a match).
+        harness.input_mut().events.push(egui::Event::Key {
+            key: egui::Key::Enter,
+            physical_key: None,
+            pressed: true,
+            repeat: false,
+            modifiers: egui::Modifiers::NONE,
+        });
+        harness.step();
+        harness.step();
+        let app = harness.state();
+        let cur = app.editor_cursor_byte.unwrap_or(0);
+        assert!(
+            m.iter().any(|(s, _)| *s == cur),
+            "cursor did not land on a match (cursor={cur}, matches={m:?})"
+        );
+        eprintln!("find flow ok: search={search} matches={} cursor={cur}", m.len());
+    }
+
+    /// Render the actual UI to a PNG so the find bar's look can be inspected
+    /// (guards "搜索框不是 egui" style regressions).
+    /// run with: cargo test find_bar_screenshot -- --ignored --nocapture
+    #[test]
+    #[ignore]
+    fn find_bar_screenshot() {
+        let settings = Settings::load();
+        if settings.update_dir.is_empty() || settings.game_dir.is_empty() {
+            eprintln!("game dirs not configured; skipping");
+            return;
+        }
+        let found = util::find_file("Actor/Pack/Armor_001_Head.sbactorpack").unwrap();
+        let source = match found {
+            FoundFile::Path(p) => PackSource::Path(p),
+            FoundFile::Resident { titlebg, inner } => PackSource::Resident { titlebg, inner },
+        };
+        let actor = BATActor::new(&source).unwrap();
+        let body = actor.get_link_data("GParamUser");
+        let mut app = App {
+            settings,
+            actor: Some(actor),
+            tab: 11, // General Param
+            link_panel: None,
+            editor: None,
+            texts_panel: None,
+            actor_select: None,
+            settings_panel: None,
+            save_dir_request: false,
+            about_open: false,
+            msg: None,
+            status: None,
+            last_frame_rect: None,
+            saving: None,
+            save_armed: false,
+            editor_cursor_byte: None,
+            find_focus_pending: false,
+            editor_edit_id: None,
+            editor_edit_rect: None,
+            ui_lang: crate::i18n::UiLang::En,
+        };
+        app.editor = Some(crate::app::EditorState {
+            link: "GParamUser".to_string(),
+            text: format!("{body}\n# cjk 汉字内容 测试\nneeds: zzz marker\nmore: zzz marker again"),
+            saved_hash: 0,
+            rename_on_edit: false,
+            suppress_rename: false,
+            search: "zzz".to_string(),
+            find_open: true,
+            pending_cursor: None,
+            scroll_offset: None,
+        });
+        let mut harness = egui_kittest::Harness::builder()
+            .with_size(egui::Vec2::new(1280.0, 860.0))
+            .wgpu()
+            .build_ui_state(|ui, app: &mut App| {
+                app.root_ui(ui);
+            }, app);
+        super::setup_fonts(&harness.ctx);
+        harness.run_steps(3);
+        let img = harness.render().expect("render");
+        let path = std::env::temp_dir().join("find_bar.png");
+        image::save_buffer(
+            &path,
+            &img,
+            img.width(),
+            img.height(),
+            image::ColorType::Rgba8,
+        )
+        .expect("save");
+        eprintln!("saved screenshot: {}", path.display());
+    }
 }
 
 use crate::actor::{get_all_vanilla_actors, try_retrieve_custom_file, BATActor};
@@ -1370,7 +1576,13 @@ impl App {
                             matches.len()
                         }
                     });
-                let pos = ui.max_rect().right_top() + egui::vec2(-380.0, 6.0);
+                // Anchor just inside the top-right of the editor (falls back
+                // to the panel corner before the editor is laid out).
+                let right_top = self
+                    .editor_edit_rect
+                    .map(|r| r.right_top())
+                    .unwrap_or_else(|| ui.max_rect().right_top());
+                let pos = right_top + egui::vec2(-400.0, 6.0);
                 egui::Area::new(egui::Id::new("find_bar"))
                     .fixed_pos(pos)
                     .order(egui::Order::Foreground)
@@ -1380,12 +1592,14 @@ impl App {
                         } else {
                             egui::Theme::Light
                         };
-                        egui::Frame::window(&ctx.style_of(theme)).show(ui, |ui| {
+                        egui::Frame::window(&ctx.style_of(theme))
+                            .inner_margin(egui::Margin::same(8))
+                            .show(ui, |ui| {
                             ui.horizontal(|ui| {
                                 let resp = ui.add(
                                     egui::TextEdit::singleline(&mut editor.search)
                                         .id(egui::Id::new("find_input"))
-                                        .desired_width(200.0)
+                                        .desired_width(220.0)
                                         .hint_text(ty(ui_lang, "Find…")),
                                 );
                                 if self.find_focus_pending {
@@ -1401,6 +1615,12 @@ impl App {
                                     cmd = Some(false);
                                 }
                                 if ui.button("▼").clicked() {
+                                    cmd = Some(true);
+                                }
+                                // VS Code behavior: Enter jumps to the next match.
+                                if ui.input(|i| i.key_pressed(Key::Enter))
+                                    && !matches.is_empty()
+                                {
                                     cmd = Some(true);
                                 }
                                 if ui.button("✕").clicked() {
@@ -1419,6 +1639,13 @@ impl App {
                                         next_match(&matches, cur, forward)
                                     {
                                         editor.pending_cursor = Some(s);
+                                        // Move focus to the editor so the
+                                        // caret jumps visibly and CodeEditor
+                                        // scrolls it into view (its inner
+                                        // TextEdit only scrolls when focused).
+                                        if let Some(id) = self.editor_edit_id {
+                                            ctx.memory_mut(|m| m.request_focus(id));
+                                        }
                                     }
                                 }
                             });
@@ -1871,23 +2098,49 @@ pub static YAML_SYNTAX: std::sync::LazyLock<egui_code_editor::Syntax> =
             ]))
     });
 
-/// ASCII case-insensitive find of `needle` in `haystack`, returning byte
-/// ranges of all occurrences. Non-ASCII needles return no matches (keeps all
-/// returned ranges on character boundaries).
+/// Case-insensitive find of `needle` in `haystack`, returning byte ranges of
+/// all occurrences. ASCII needles use a fast byte scan (ranges always land on
+/// char boundaries because ASCII bytes can never alias a UTF-8 lead byte);
+/// non-ASCII needles (CJK, accented text) are matched exactly, char by char,
+/// producing char-boundary byte ranges — the old ASCII-only guard made
+/// searching Chinese/Japanese text impossible.
 pub fn find_matches(haystack: &str, needle: &str) -> Vec<(usize, usize)> {
     let mut out = Vec::new();
-    let n = needle.as_bytes();
-    let h = haystack.as_bytes();
-    if n.is_empty() || n.len() > h.len() || !needle.is_ascii() {
+    if needle.is_empty() || needle.len() > haystack.len() {
         return out;
     }
-    let mut i = 0;
-    while i + n.len() <= h.len() {
-        if h[i..i + n.len()].eq_ignore_ascii_case(n) {
-            out.push((i, i + n.len()));
-            i += n.len();
-        } else {
-            i += 1;
+    if needle.is_ascii() {
+        let n = needle.as_bytes();
+        let h = haystack.as_bytes();
+        let mut i = 0;
+        while i + n.len() <= h.len() {
+            if h[i..i + n.len()].eq_ignore_ascii_case(n) {
+                out.push((i, i + n.len()));
+                i += n.len();
+            } else {
+                i += 1;
+            }
+        }
+    } else {
+        let n: Vec<char> = needle.chars().collect();
+        let h: Vec<char> = haystack.chars().collect();
+        if n.len() > h.len() {
+            return out;
+        }
+        for i in 0..=(h.len() - n.len()) {
+            if h[i..i + n.len()] == n[..] {
+                let start = haystack
+                    .char_indices()
+                    .nth(i)
+                    .map(|(b, _)| b)
+                    .unwrap_or(haystack.len());
+                let end = haystack
+                    .char_indices()
+                    .nth(i + n.len())
+                    .map(|(b, _)| b)
+                    .unwrap_or(haystack.len());
+                out.push((start, end));
+            }
         }
     }
     out

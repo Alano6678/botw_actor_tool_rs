@@ -20,8 +20,9 @@ serde_json = { version = "1.0.151", features = ["preserve_order"] }
 thiserror = "2.0.20"
 
 [dev-dependencies]
-egui_kittest = { version = "0.36.1", default-features = false }
+egui_kittest = { version = "0.36.1", default-features = false, features = ["snapshot", "wgpu"] }
 kittest = "0.4.0"
+image = "0.25"
 
 [profile.release]
 lto = "thin"
