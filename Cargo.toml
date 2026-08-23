@@ -1,0 +1,35 @@
+[package]
+name = "botw_actor_tool_rs"
+version = "0.1.0"
+edition = "2024"
+description = "A Rust + egui rewrite of the Breath of the Wild Actor Tool"
+license = "AGPL-3.0-or-later"
+
+[dependencies]
+anyhow = "1.0.104"
+crc32fast = "1.5.0"
+eframe = "0.36.1"
+egui_code_editor = "0.4.1"
+indexmap = { version = "2.12.1", features = ["serde"] }
+msyt = { path = "vendor/msyt" }
+regex = "1.12.1"
+rfd = "0.17.2"
+roead = { version = "1.0.0", features = ["yaml"] }
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = { version = "1.0.151", features = ["preserve_order"] }
+thiserror = "2.0.20"
+
+[dev-dependencies]
+egui_kittest = { version = "0.36.1", default-features = false }
+kittest = "0.4.0"
+
+[profile.release]
+lto = "thin"
+
+# Make dev builds (the default `cargo run`) usable: optimize the app a bit
+# and all dependencies fully — egui in an unoptimized debug build is very slow.
+[profile.dev]
+opt-level = 1
+
+[profile.dev.package."*"]
+opt-level = 2

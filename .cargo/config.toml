@@ -1,0 +1,12 @@
+# Project-local cargo config.
+# The user-level config (CARGO_HOME/D:\cargo\config.toml) sets an HTTP proxy at
+# 127.0.0.1:2080 which is not running in this environment; direct access to
+# crates.io works, so disable the proxy here for this project only.
+[http]
+proxy = ""
+
+[https]
+proxy = ""
+
+[net]
+git-fetch-with-cli = true
