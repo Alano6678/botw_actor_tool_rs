@@ -140,6 +140,9 @@ pub fn tr(lang: UiLang, key: &str) -> &str {
         "Animation Info" => "动画信息",
         "Texts" => "文本",
         "Flags" => "标志",
+        "Flags for this actor" => "该 Actor 的标志",
+        "Add flag" => "添加标志",
+        "ActorInfo — auto-generated fields" => "ActorInfo — 自动生成的字段",
         // ActorInfo editor page
         "These fields are regenerated on save. Leave a cell empty to keep the auto value." => {
             "以下字段会在保存时自动重新生成。留空表示使用自动值。"

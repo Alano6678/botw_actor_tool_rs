@@ -1998,6 +1998,20 @@ impl App {
         let mut apply = false;
         let mut refresh = false;
         ui.horizontal(|ui| {
+            ui.label(
+                RichText::new(ty(ui_lang, "ActorInfo — auto-generated fields")).strong(),
+            );
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                if ui.button(ty(ui_lang, "Apply")).clicked() {
+                    apply = true;
+                }
+                if ui.button(ty(ui_lang, "Refresh")).clicked() {
+                    refresh = true;
+                }
+            });
+        });
+        ui.add_space(2.0);
+        ui.horizontal(|ui| {
             if ui
                 .checkbox(
                     keep_extra,
@@ -2012,14 +2026,6 @@ impl App {
                     .small()
                     .weak(),
             );
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if ui.button(ty(ui_lang, "Apply")).clicked() {
-                    apply = true;
-                }
-                if ui.button(ty(ui_lang, "Refresh")).clicked() {
-                    refresh = true;
-                }
-            });
         });
         if refresh {
             if let Some(actor) = self.actor.as_mut() {
@@ -2032,7 +2038,7 @@ impl App {
             let n = panel.entries.len();
             egui::Grid::new("info_grid")
                 .num_columns(3)
-                .spacing([16.0, 6.0])
+                .spacing([20.0, 6.0])
                 .striped(true)
                 .show(ui, |ui| {
                     ui.label(RichText::new(ty(ui_lang, "Field")).strong());
@@ -2146,37 +2152,34 @@ impl App {
         });
         ui.separator();
 
-        // Add-flag form.
+        // Add-flag form (kept in its own group so it reads as a panel).
         let panel = self.flags_panel.as_mut().unwrap();
-        ui.horizontal(|ui| {
-            ui.label(ty(ui_lang, "Add flag:"));
-            ui.add(
-                egui::TextEdit::singleline(&mut panel.name)
-                    .desired_width(160.0)
-                    .hint_text(ty(ui_lang, "Name")),
-            );
-            let mut is_s32 = panel.ftype == "s32_data";
-            if ui
-                .selectable_label(is_s32, ty(ui_lang, "s32_data"))
-                .clicked()
-            {
-                is_s32 = true;
-            }
-            if ui
-                .selectable_label(!is_s32, ty(ui_lang, "bool_data"))
-                .clicked()
-            {
-                is_s32 = false;
-            }
-            panel.ftype = if is_s32 { "s32_data".into() } else { "bool_data".into() };
-            if is_s32 {
-                ui.add(egui::DragValue::new(&mut panel.s32));
-            } else {
-                ui.checkbox(&mut panel.bool_on, ty(ui_lang, "Value"));
-            }
-            if ui.button(ty(ui_lang, "Add")).clicked() {
-                do_add = true;
-            }
+        ui.group(|ui| {
+            ui.horizontal(|ui| {
+                ui.label(RichText::new(ty(ui_lang, "Add flag")).strong());
+                ui.add_space(10.0);
+                ui.add(
+                    egui::TextEdit::singleline(&mut panel.name)
+                        .desired_width(180.0)
+                        .hint_text(ty(ui_lang, "Name")),
+                );
+                let mut is_s32 = panel.ftype == "s32_data";
+                egui::ComboBox::from_id_salt("flag_type")
+                    .selected_text(if is_s32 { "s32_data" } else { "bool_data" })
+                    .show_ui(ui, |ui| {
+                        ui.selectable_value(&mut is_s32, true, "s32_data");
+                        ui.selectable_value(&mut is_s32, false, "bool_data");
+                    });
+                panel.ftype = if is_s32 { "s32_data".into() } else { "bool_data".into() };
+                if is_s32 {
+                    ui.add(egui::DragValue::new(&mut panel.s32));
+                } else {
+                    ui.checkbox(&mut panel.bool_on, ty(ui_lang, "Value"));
+                }
+                if ui.button(ty(ui_lang, "Add")).clicked() {
+                    do_add = true;
+                }
+            });
         });
         ui.separator();
 
@@ -2184,31 +2187,48 @@ impl App {
             if list.is_empty() {
                 ui.label(ty(ui_lang, "No flags found for this actor."));
             }
-            for (ftype, f) in &list {
-                ui.horizontal(|ui| {
-                    ui.label(RichText::new(&f.data_name).strong());
-                    ui.label(*ftype);
-                    if matches!(f.kind, crate::flag::FlagKind::Bool { .. }) {
-                        let mut on = flag_bool_on(f);
-                        if ui.checkbox(&mut on, "").changed() {
-                            let mut nf = f.clone();
-                            set_flag_bool(&mut nf, on);
-                            updates.push((ftype, nf));
+            for ftype in ["bool_data", "s32_data"] {
+                let items: Vec<&(&'static str, crate::flag::Flag)> =
+                    list.iter().filter(|(t, _)| *t == ftype).collect();
+                if items.is_empty() {
+                    continue;
+                }
+                ui.add_space(6.0);
+                ui.label(RichText::new(ftype).strong());
+                ui.add_space(2.0);
+                for (t, f) in items {
+                    ui.horizontal(|ui| {
+                        ui.add_sized(
+                            [190.0, 20.0],
+                            egui::Label::new(RichText::new(&f.data_name).strong()),
+                        );
+                        if matches!(f.kind, crate::flag::FlagKind::Bool { .. }) {
+                            let mut on = flag_bool_on(f);
+                            if ui.checkbox(&mut on, "").changed() {
+                                let mut nf = f.clone();
+                                set_flag_bool(&mut nf, on);
+                                updates.push((t, nf));
+                            }
+                        } else if matches!(f.kind, crate::flag::FlagKind::S32 { .. }) {
+                            let mut v = flag_s32(f);
+                            if ui.add(egui::DragValue::new(&mut v)).changed() {
+                                let mut nf = f.clone();
+                                set_flag_s32(&mut nf, v);
+                                updates.push((t, nf));
+                            }
+                        } else {
+                            ui.label(RichText::new(flag_display(f)).monospace());
                         }
-                    } else if matches!(f.kind, crate::flag::FlagKind::S32 { .. }) {
-                        let mut v = flag_s32(f);
-                        if ui.add(egui::DragValue::new(&mut v)).changed() {
-                            let mut nf = f.clone();
-                            set_flag_s32(&mut nf, v);
-                            updates.push((ftype, nf));
-                        }
-                    } else {
-                        ui.label(RichText::new(flag_display(f)).monospace());
-                    }
-                    if ui.button(ty(ui_lang, "Del")).clicked() {
-                        deletes.push((ftype, f.hash_value));
-                    }
-                });
+                        ui.with_layout(
+                            egui::Layout::right_to_left(egui::Align::Center),
+                            |ui| {
+                                if ui.button(ty(ui_lang, "Del")).clicked() {
+                                    deletes.push((t, f.hash_value));
+                                }
+                            },
+                        );
+                    });
+                }
             }
         });
 
