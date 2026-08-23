@@ -8,22 +8,6 @@ file as YAML (AAMP/BYML), Texts (MSBT), ActorInfo and GameData Flags — and on
 save it regenerates `ActorInfo.product.sbyml`, the text files and the
 GameData flags automatically.
 
-## About
-
-- **Repository**: [https://github.com/Alano6678/botw_actor_tool_rs](https://github.com/Alano6678/botw_actor_tool_rs)
-- **Language**: Rust + egui (desktop GUI); every file format is handled by
-  libraries ([roead](https://github.com/NiceneNerd/roead) / [msyt](https://github.com/NiceneNerd/msyt) / [msbt-rs](https://github.com/NiceneNerd/msbt-rs))
-- **License**: AGPL-3.0-or-later
-- **Status**: feature-faithful port of the original Python tool
-
-## Screenshot
-
-![BotW Actor Tool](assets/screenshot_main.png)
-
-> Editing an actor's General Parameter file in dark mode, with the find bar
-> open (matches highlighted in blue, the current one stronger) and the
-> ActorInfo / Flags tabs available.
-
 ## Features
 
 - Open vanilla actors from your game dump (`Ctrl+N`) or actors from a mod
@@ -147,21 +131,6 @@ AGPLv3 is compatible).
 加载原始/Mod Actor、编辑 Actor Link、按 YAML 编辑各链接文件（AAMP/BYML）、
 编辑 Texts（MSBT）、ActorInfo 与 GameData Flags；保存时自动重新生成
 `ActorInfo.product.sbyml`、文本与 GameData 标志。
-
-## 关于
-
-- **仓库**：[https://github.com/Alano6678/botw_actor_tool_rs](https://github.com/Alano6678/botw_actor_tool_rs)
-- **语言**：Rust + egui，所有文件格式均由库处理
-  （[roead](https://github.com/NiceneNerd/roead) / [msyt](https://github.com/NiceneNerd/msyt) / [msbt-rs](https://github.com/NiceneNerd/msbt-rs)）
-- **许可**：AGPL-3.0-or-later
-- **状态**：原版 Python 工具的功能忠实移植版
-
-## 截图
-
-![BotW Actor Tool](assets/screenshot_main.png)
-
-> 深色模式下编辑 actor 的通用参数文件，搜索条展开（匹配蓝色高亮、当前匹配更深），
-> 并带有 ActorInfo / Flags 标签页。
 
 ## 功能
 
