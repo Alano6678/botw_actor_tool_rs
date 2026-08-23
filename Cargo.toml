@@ -28,7 +28,10 @@ image = "0.25"
 winresource = "0.1"
 
 [profile.release]
-lto = "thin"
+# Smaller + faster release binary at the cost of a longer build.
+lto = "fat"
+codegen-units = 1
+strip = true
 
 # Make dev builds (the default `cargo run`) usable: optimize the app a bit
 # and all dependencies fully — egui in an unoptimized debug build is very slow.
