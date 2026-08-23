@@ -871,6 +871,7 @@ pub struct SettingsPanelState {
     pub lang: String,
     pub ui_lang: String,
     pub dark: bool,
+    pub show_unsupported_tabs: bool,
 }
 
 impl SettingsPanelState {
@@ -882,6 +883,7 @@ impl SettingsPanelState {
             lang: s.lang.clone(),
             ui_lang: s.ui_lang.clone(),
             dark: s.dark_theme,
+            show_unsupported_tabs: s.show_unsupported_tabs,
         }
     }
 }
@@ -1336,6 +1338,18 @@ impl App {
                 ui.add_space(4.0);
                 ui.vertical(|ui| {
                     for (i, tab) in TABS.iter().enumerate() {
+                        // Hide the "not supported" link tabs (Elink / Profile /
+                        // Slink / Xlink) unless the user enables them in
+                        // Settings → "Show unsupported tabs".
+                        let link = LINK_TO_TAB
+                            .iter()
+                            .find(|(t, _)| *t == i)
+                            .map(|(_, l)| *l);
+                        if !self.settings.show_unsupported_tabs
+                            && link.map(|l| NOT_IMPLEMENTED.contains(&l)).unwrap_or(false)
+                        {
+                            continue;
+                        }
                         let enabled = self.tab_enabled(i);
                         let mut text = RichText::new(ty(ui_lang, tab));
                         if !enabled {
@@ -2399,6 +2413,10 @@ impl App {
                     panel.ui_lang = current.code().to_string();
                 });
                 ui.checkbox(&mut panel.dark, ty(ui_lang, "Dark Mode"));
+                ui.checkbox(
+                    &mut panel.show_unsupported_tabs,
+                    ty(ui_lang, "Show unsupported tabs"),
+                );
                 ui.horizontal(|ui| {
                     if ui.button(ty(ui_lang, "Accept")).clicked() {
                         let test = Settings {
@@ -2408,6 +2426,7 @@ impl App {
                             lang: panel.lang.clone(),
                             ui_lang: panel.ui_lang.clone(),
                             dark_theme: panel.dark,
+                            show_unsupported_tabs: panel.show_unsupported_tabs,
                             ..Settings::default()
                         };
                         let fails = [

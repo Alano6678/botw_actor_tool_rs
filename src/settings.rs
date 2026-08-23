@@ -16,6 +16,8 @@ pub struct Settings {
     #[serde(default)]
     pub dark_theme: bool,
     #[serde(default)]
+    pub show_unsupported_tabs: bool,
+    #[serde(default)]
     pub win_pos_x: i32,
     #[serde(default)]
     pub win_pos_y: i32,
@@ -38,6 +40,7 @@ impl Default for Settings {
             lang: "USen".to_string(),
             ui_lang: default_ui_lang(),
             dark_theme: false,
+            show_unsupported_tabs: false,
             win_pos_x: 0,
             win_pos_y: 0,
             win_width: 0,

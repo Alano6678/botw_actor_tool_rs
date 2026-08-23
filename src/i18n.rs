@@ -110,6 +110,7 @@ pub fn tr(lang: UiLang, key: &str) -> &str {
         "Language" => "文本语言",
         "UI Language" => "界面语言",
         "Dark Mode" => "深色模式",
+        "Show unsupported tabs" => "显示不支持的标签页",
         "Match Case" => "区分大小写",
         // Left tab bar (tab names shown when UI language is Chinese)
         "Actor Link" => "Actor 链接",
