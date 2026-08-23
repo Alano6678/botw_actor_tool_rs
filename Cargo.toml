@@ -1,6 +1,6 @@
 [package]
 name = "botw_actor_tool_rs"
-version = "0.1.0"
+version = "0.1.5"
 edition = "2024"
 description = "A Rust + egui rewrite of the Breath of the Wild Actor Tool"
 license = "AGPL-3.0-or-later"
