@@ -43,13 +43,6 @@ with a modern GUI and a few improvements (see *Differences* below).
 | YAML code editor | [egui_code_editor](https://crates.io/crates/egui_code_editor) 0.4 |
 | Data | `data/*.json` reused from the original tool (embedded at compile time) |
 
-> **About vendor/**: `msyt`/`msbt-rs` are vendored under `vendor/` as local
-> path dependencies because the original machine had `github.com` blocked.
-> On a normal network you can change `Cargo.toml` back to
-> `msyt = { git = "https://github.com/NiceneNerd/msyt" }` and delete `vendor/`.
-> `.cargo/config.toml` is a machine-specific workaround for a dead proxy and
-> can be removed as well.
-
 ## Build & run
 
 ```bash
@@ -172,13 +165,6 @@ Actor Link（Dummy / ActorName / Custom + 自定义链接导入）、按 YAML �
 | 文件对话框 | [rfd](https://crates.io/crates/rfd) |
 | YAML 代码编辑器 | [egui_code_editor](https://crates.io/crates/egui_code_editor) 0.4 |
 | 数据 | `data/*.json` 直接沿用原版工具的数据（编译期嵌入） |
-
-> **关于 vendor/**：因为本机 hosts 将 `github.com` 指向 127.0.0.1（git 拉取失败），
-> `msyt`/`msbt-rs` 以 tarball 形式放入了 `vendor/` 并作为本地 path 依赖。
-> 若网络正常，可将 `Cargo.toml` 中的 `msyt = { path = "vendor/msyt" }` 改回
-> `msyt = { git = "https://github.com/NiceneNerd/msyt" }`，并删除 `vendor/`。
-> 另外 `.cargo/config.toml` 针对本机关闭了失效的 127.0.0.1:2080 代理，
-> 换成正常环境后可以删除。
 
 ### 构建与运行
 
