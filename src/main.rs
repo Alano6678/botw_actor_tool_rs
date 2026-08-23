@@ -5,6 +5,10 @@
 //! - `msyt` (+ `msbt`) — MSBT message text archives
 //! - game data JSON files are shared with the Python tool
 
+// Hide the console window of the RELEASE build (debug keeps it for logs).
+// On Windows this links the exe as a GUI subsystem app.
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+
 mod actor;
 mod actorinfo;
 mod app;
