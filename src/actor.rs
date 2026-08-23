@@ -339,7 +339,7 @@ impl BATActor {
 
     pub fn get_info(&mut self) -> Map {
         if self.needs_info_update {
-            self.info = self.info_preview();
+            self.info = self.info_preview(self.info_keep_extra);
             self.needs_info_update = false;
         }
         let mut entry = self.info.clone();
@@ -354,15 +354,16 @@ impl BATActor {
         entry
     }
 
-    /// The freshly regenerated ActorInfo entry (without overrides) — this is
-    /// what the ActorInfo editor page shows as the "auto" values.
-    pub fn info_preview(&mut self) -> Map {
+    /// The freshly regenerated ActorInfo entry (without overrides). `keep_extra`
+    /// controls whether fields outside the profile whitelist are dropped —
+    /// pass the page's current checkbox state so the preview reflects it.
+    pub fn info_preview(&mut self, keep_extra: bool) -> Map {
         actorinfo::generate_actor_info(
             &self.pack,
             self.has_far(),
             &self.info,
             self.origname == self.pack.get_name(),
-            self.info_keep_extra,
+            keep_extra,
         )
         .unwrap_or_else(|e| {
             eprintln!("failed to generate actor info: {e}");

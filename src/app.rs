@@ -1928,9 +1928,16 @@ impl App {
             return;
         };
         // Rebuild the preview whenever the actor's info is dirty (e.g. the
-        // user edited a link file), keeping the typed overrides.
+        // user edited a link file), keeping the typed overrides. The preview
+        // uses the page's CURRENT keep_extra checkbox so that toggling it
+        // immediately shows the extra (non-whitelist) fields.
         if self.info_panel.is_none() || actor.needs_info_update {
-            let preview = actor.info_preview();
+            let current_keep = self
+                .info_panel
+                .as_ref()
+                .map(|p| p.keep_extra)
+                .unwrap_or(actor.info_keep_extra);
+            let preview = actor.info_preview(current_keep);
             actor.needs_info_update = false;
             let entries = preview
                 .iter()
@@ -1941,14 +1948,10 @@ impl App {
                 .as_ref()
                 .map(|p| p.overrides.clone())
                 .unwrap_or_else(|| actor.info_overrides.clone());
-            let keep_extra = old
-                .as_ref()
-                .map(|p| p.keep_extra)
-                .unwrap_or(actor.info_keep_extra);
             self.info_panel = Some(InfoPanelState {
                 entries,
                 overrides,
-                keep_extra,
+                keep_extra: current_keep,
             });
         }
         let panel = self.info_panel.as_mut().unwrap();
@@ -1957,6 +1960,15 @@ impl App {
         let mut apply = false;
         let mut refresh = false;
         ui.horizontal(|ui| {
+            if ui
+                .checkbox(
+                    keep_extra,
+                    ty(ui_lang, "Keep extra fields (not in the profile key list)"),
+                )
+                .changed()
+            {
+                refresh = true;
+            }
             ui.label(
                 RichText::new(ty(ui_lang, "These fields are regenerated on save. Leave a cell empty to keep the auto value."))
                     .small()
@@ -1978,10 +1990,6 @@ impl App {
             return; // rebuilt next frame
         }
         egui::ScrollArea::vertical().show(ui, |ui| {
-            ui.checkbox(
-                keep_extra,
-                ty(ui_lang, "Keep extra fields (not in the profile key list)"),
-            );
             ui.add_space(4.0);
             let n = panel.entries.len();
             egui::Grid::new("info_grid")
