@@ -2826,15 +2826,16 @@ fn dim_background(ctx: &egui::Context) {
 
 fn setup_fonts(ctx: &egui::Context) {
     let mut fonts = egui::FontDefinitions::default();
-    // Prefer a BOLDER CJK face (hei/bold) so the UI text reads heavier and
-    // clearer. It becomes the PRIMARY Proportional font; Monospace keeps its
-    // own width so the editor's line numbers / column alignment stay correct
-    // (the CJK face is only a fallback there for CJK glyphs).
+    // Prefer Microsoft YaHei again (the font used before), but its BOLD face
+    // yields the thicker look the user asked for. It becomes the PRIMARY
+    // Proportional font; Monospace keeps its own width so the editor's line
+    // numbers / column alignment stay correct (the CJK face is only a
+    // fallback there for CJK glyphs).
     let candidates = [
-        "C:\\Windows\\Fonts\\simhei.ttf",
         "C:\\Windows\\Fonts\\msyhbd.ttc",
         "C:\\Windows\\Fonts\\msyh.ttf",
         "C:\\Windows\\Fonts\\msjh.ttf",
+        "C:\\Windows\\Fonts\\simhei.ttf",
         "C:\\Windows\\Fonts\\msyh.ttc",
         "C:\\Windows\\Fonts\\simsun.ttc",
     ];
