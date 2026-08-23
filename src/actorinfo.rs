@@ -631,6 +631,7 @@ pub fn generate_actor_info(
     has_far: bool,
     old_info: &Map,
     old_actor: bool,
+    keep_extra: bool,
 ) -> anyhow::Result<Map> {
     let mut entry: Map = old_info.clone();
     entry.insert("name".into(), Byml::String(pack.get_name().into()));
@@ -689,14 +690,37 @@ pub fn generate_actor_info(
     }
 
     let keys = data::keys_for_profile(&profile);
-    let to_remove: Vec<String> = entry
-        .keys()
-        .map(|k| k.to_string())
-        .filter(|k| !keys.iter().any(|kk| kk == k))
-        .collect();
-    for k in to_remove {
-        entry.remove(k.as_str());
+    if !keep_extra {
+        let to_remove: Vec<String> = entry
+            .keys()
+            .map(|k| k.to_string())
+            .filter(|k| !keys.iter().any(|kk| kk == k))
+            .collect();
+        for k in to_remove {
+            entry.remove(k.as_str());
+        }
     }
 
     Ok(entry)
+}
+
+/// Parse a user-typed override string into a BYML value (bool / int /
+/// float / string). Used by the ActorInfo editor page's override column.
+pub fn parse_api_value(s: &str) -> Byml {
+    let t = s.trim();
+    if t.eq_ignore_ascii_case("true") {
+        return Byml::Bool(true);
+    }
+    if t.eq_ignore_ascii_case("false") {
+        return Byml::Bool(false);
+    }
+    if let Ok(i) = t.parse::<i32>() {
+        return Byml::I32(i);
+    }
+    if let Ok(f) = t.parse::<f64>() {
+        if f.is_finite() {
+            return Byml::Float(f as f32);
+        }
+    }
+    Byml::String(t.to_string().into())
 }

@@ -39,6 +39,7 @@ mod tests {
             link_panel: None,
             editor: None,
             texts_panel: None,
+            info_panel: None,
             actor_select: None,
             settings_panel: None,
             save_dir_request: false,
@@ -121,6 +122,7 @@ mod tests {
             link_panel: None,
             editor: None,
             texts_panel: None,
+            info_panel: None,
             actor_select: None,
             settings_panel: None,
             save_dir_request: false,
@@ -215,6 +217,7 @@ mod tests {
             link_panel: None,
             editor: None,
             texts_panel: None,
+            info_panel: None,
             actor_select: None,
             settings_panel: None,
             save_dir_request: false,
@@ -364,6 +367,7 @@ mod tests {
             link_panel: None,
             editor: None,
             texts_panel: None,
+            info_panel: None,
             actor_select: None,
             settings_panel: None,
             save_dir_request: false,
@@ -549,6 +553,7 @@ mod tests {
             link_panel: None,
             editor: None,
             texts_panel: None,
+            info_panel: None,
             actor_select: None,
             settings_panel: None,
             save_dir_request: false,
@@ -650,6 +655,7 @@ pub const TABS: &[&str] = &[
     "Xlink",
     "Animation Info",
     "Texts",
+    "ActorInfo",
     "Flags",
 ];
 
@@ -754,6 +760,17 @@ pub struct EditorState {
     pub match_case: bool,
     pub pending_cursor: Option<usize>,
     pub scroll_offset: Option<f32>,
+}
+
+/// ActorInfo editor page state: what the tool will generate for this actor
+/// (auto values) plus the user's manual overrides.
+pub struct InfoPanelState {
+    /// (field, auto value as text) — regenerated when the actor changes.
+    pub entries: Vec<(String, String)>,
+    /// Manual overrides; empty string means "use the auto value".
+    pub overrides: HashMap<String, String>,
+    /// Keep old fields not in the profile whitelist.
+    pub keep_extra: bool,
 }
 
 pub struct TextsPanelState {
@@ -872,6 +889,7 @@ pub struct App {
     pub link_panel: Option<LinkPanelState>,
     pub editor: Option<EditorState>,
     pub texts_panel: Option<TextsPanelState>,
+    pub info_panel: Option<InfoPanelState>,
     pub actor_select: Option<ActorSelectState>,
     pub settings_panel: Option<SettingsPanelState>,
     pub save_dir_request: bool,
@@ -900,6 +918,7 @@ impl App {
             link_panel: None,
             editor: None,
             texts_panel: None,
+            info_panel: None,
             actor_select: None,
             settings_panel: None,
             save_dir_request: false,
@@ -966,6 +985,7 @@ impl App {
         self.tab = 0;
         self.editor = None;
         self.texts_panel = None;
+        self.info_panel = None;
         let name = self.actor.as_ref().map(|a| a.get_name()).unwrap_or_default();
         self.link_panel = self.actor.as_ref().map(LinkPanelState::new);
         if self.actor.is_some() {
@@ -1355,7 +1375,7 @@ impl App {
         let Some(actor) = &self.actor else {
             return false;
         };
-        if tab == 0 || tab == 25 || tab == 26 {
+        if tab == 0 || tab == 25 || tab == 26 || tab == 27 {
             return true;
         }
         if let Some((_, link)) = LINK_TO_TAB.iter().find(|(i, _)| *i == tab) {
@@ -1378,6 +1398,9 @@ impl App {
             if let Some(actor) = &self.actor {
                 self.texts_panel = Some(TextsPanelState::new(actor));
             }
+        }
+        if tab == 26 {
+            self.info_panel = None; // rebuilt lazily with a fresh preview
         }
     }
 
@@ -1449,7 +1472,8 @@ impl App {
         match self.tab {
             0 => self.show_actor_link(ui),
             25 => self.show_texts(ui),
-            26 => {
+            26 => self.show_actor_info(ui),
+            27 => {
                 ui.label(ty(ui_lang, "The Flags tab is not implemented yet (same as the original tool)."));
             }
             i => match LINK_TO_TAB.iter().find(|(t, _)| *t == i) {
@@ -1895,6 +1919,105 @@ impl App {
         });
     }
 
+    /// ActorInfo editor: lists the fields the tool will GENERATE for this
+    /// actor on save (auto values), with an override column that is applied
+    /// on top when saving.
+    fn show_actor_info(&mut self, ui: &mut egui::Ui) {
+        let ui_lang = self.ui_lang;
+        let Some(actor) = self.actor.as_mut() else {
+            return;
+        };
+        // Rebuild the preview whenever the actor's info is dirty (e.g. the
+        // user edited a link file), keeping the typed overrides.
+        if self.info_panel.is_none() || actor.needs_info_update {
+            let preview = actor.info_preview();
+            actor.needs_info_update = false;
+            let entries = preview
+                .iter()
+                .map(|(k, v)| (k.to_string(), format_byml_value(v)))
+                .collect::<Vec<_>>();
+            let old = self.info_panel.take();
+            let overrides = old
+                .as_ref()
+                .map(|p| p.overrides.clone())
+                .unwrap_or_else(|| actor.info_overrides.clone());
+            let keep_extra = old
+                .as_ref()
+                .map(|p| p.keep_extra)
+                .unwrap_or(actor.info_keep_extra);
+            self.info_panel = Some(InfoPanelState {
+                entries,
+                overrides,
+                keep_extra,
+            });
+        }
+        let panel = self.info_panel.as_mut().unwrap();
+        let overrides = &mut panel.overrides;
+        let keep_extra = &mut panel.keep_extra;
+        let mut apply = false;
+        let mut refresh = false;
+        ui.horizontal(|ui| {
+            ui.label(
+                RichText::new(ty(ui_lang, "These fields are regenerated on save. Leave a cell empty to keep the auto value."))
+                    .small()
+                    .weak(),
+            );
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                if ui.button(ty(ui_lang, "Apply")).clicked() {
+                    apply = true;
+                }
+                if ui.button(ty(ui_lang, "Refresh")).clicked() {
+                    refresh = true;
+                }
+            });
+        });
+        if refresh {
+            if let Some(actor) = self.actor.as_mut() {
+                actor.needs_info_update = true;
+            }
+            return; // rebuilt next frame
+        }
+        egui::ScrollArea::vertical().show(ui, |ui| {
+            ui.checkbox(
+                keep_extra,
+                ty(ui_lang, "Keep extra fields (not in the profile key list)"),
+            );
+            ui.add_space(4.0);
+            let n = panel.entries.len();
+            egui::Grid::new("info_grid")
+                .num_columns(3)
+                .spacing([16.0, 6.0])
+                .striped(true)
+                .show(ui, |ui| {
+                    ui.label(RichText::new(ty(ui_lang, "Field")).strong());
+                    ui.label(RichText::new(ty(ui_lang, "Auto value")).strong());
+                    ui.label(RichText::new(ty(ui_lang, "Override")).strong());
+                    ui.end_row();
+                    for i in 0..n {
+                        let (key, auto) = panel.entries[i].clone();
+                        ui.label(RichText::new(&key).strong())
+                            .on_hover_text(ty(ui_lang, info_key_hint(&key)));
+                        ui.label(RichText::new(&auto).monospace());
+                        let val = overrides.entry(key).or_default();
+                        ui.add(
+                            egui::TextEdit::singleline(val)
+                                .desired_width(240.0)
+                                .hint_text(ty(ui_lang, "auto")),
+                        );
+                        ui.end_row();
+                    }
+                });
+        });
+        if apply {
+            if let Some(actor) = self.actor.as_mut() {
+                actor.info_overrides = panel.overrides.clone();
+                actor.info_keep_extra = panel.keep_extra;
+                actor.needs_info_update = true;
+                self.status = Some(ty(ui_lang, "ActorInfo overrides applied").to_string());
+            }
+        }
+    }
+
     fn show_actor_select(&mut self, ctx: &egui::Context) {
         let ui_lang = self.ui_lang;
         let Some(state) = &mut self.actor_select else {
@@ -2235,6 +2358,37 @@ fn editor_theme(dark: bool) -> egui_code_editor::ColorTheme {
             types: "267f99",
             special: "a475f9",
         }
+    }
+}
+
+/// Human-readable source hint for an ActorInfo field (i18n key).
+fn info_key_hint(key: &str) -> &'static str {
+    match key {
+        "name" => "from name",
+        "isHasFar" => "from far variant",
+        "profile" => "from ProfileUser link",
+        "tags" => "from actor link tags",
+        "bugMask" | "sortKey" => "from save rules",
+        _ => "extracted from link files",
+    }
+}
+
+/// Render a BYML value as display text (used by the ActorInfo editor page).
+fn format_byml_value(v: &roead::byml::Byml) -> String {
+    use roead::byml::Byml;
+    match v {
+        Byml::String(s) => s.to_string(),
+        Byml::Bool(b) => b.to_string(),
+        Byml::I32(i) => i.to_string(),
+        Byml::Float(f) => format!("{f}"),
+        Byml::U32(u) => u.to_string(),
+        Byml::I64(i) => i.to_string(),
+        Byml::U64(u) => u.to_string(),
+        Byml::Double(d) => format!("{d}"),
+        Byml::Null => "null".to_string(),
+        Byml::Array(a) => format!("[{} items]", a.len()),
+        Byml::Map(m) => format!("{{{}}}", m.len()),
+        _ => format!("{v:?}"),
     }
 }
 

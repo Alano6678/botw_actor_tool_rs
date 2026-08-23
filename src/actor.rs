@@ -1,6 +1,6 @@
 //! Main actor editing object — port of the Python `actor.py`.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
 use roead::byml::{Byml, Map};
@@ -91,6 +91,12 @@ pub struct BATActor {
     pub resident: bool,
     pub origname: String,
     pub far_origname: String,
+    /// Manual ActorInfo overrides (empty string = keep the auto value).
+    /// Applied on top of the regenerated entry when saving.
+    pub info_overrides: HashMap<String, String>,
+    /// Keep old ActorInfo fields that are not in the profile whitelist
+    /// (by default the regenerated entry drops them).
+    pub info_keep_extra: bool,
 }
 
 /// ActorInfo product file loaded as BYML.
@@ -265,6 +271,8 @@ impl BATActor {
             resident,
             origname,
             far_origname,
+            info_overrides: HashMap::new(),
+            info_keep_extra: false,
         };
         actor.set_flags(&actor.origname.clone());
         Ok(actor)
@@ -331,22 +339,35 @@ impl BATActor {
 
     pub fn get_info(&mut self) -> Map {
         if self.needs_info_update {
-            match actorinfo::generate_actor_info(
-                &self.pack,
-                self.has_far(),
-                &self.info,
-                self.origname == self.pack.get_name(),
-            ) {
-                Ok(new_info) => {
-                    self.info = new_info;
-                }
-                Err(e) => {
-                    eprintln!("failed to generate actor info: {e}");
-                }
-            }
+            self.info = self.info_preview();
             self.needs_info_update = false;
         }
-        self.info.clone()
+        let mut entry = self.info.clone();
+        for (key, val) in &self.info_overrides {
+            if !val.is_empty() {
+                entry.insert(
+                    key.as_str().into(),
+                    actorinfo::parse_api_value(val),
+                );
+            }
+        }
+        entry
+    }
+
+    /// The freshly regenerated ActorInfo entry (without overrides) — this is
+    /// what the ActorInfo editor page shows as the "auto" values.
+    pub fn info_preview(&mut self) -> Map {
+        actorinfo::generate_actor_info(
+            &self.pack,
+            self.has_far(),
+            &self.info,
+            self.origname == self.pack.get_name(),
+            self.info_keep_extra,
+        )
+        .unwrap_or_else(|e| {
+            eprintln!("failed to generate actor info: {e}");
+            self.info.clone()
+        })
     }
 
     #[allow(dead_code)]
@@ -455,6 +476,7 @@ impl BATActor {
                         false,
                         far_info,
                         self.far_origname == far.get_name(),
+                        self.info_keep_extra,
                     )
                     .ok();
                 }

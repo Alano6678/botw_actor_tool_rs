@@ -139,6 +139,25 @@ pub fn tr(lang: UiLang, key: &str) -> &str {
         "Animation Info" => "动画信息",
         "Texts" => "文本",
         "Flags" => "标志",
+        // ActorInfo editor page
+        "These fields are regenerated on save. Leave a cell empty to keep the auto value." => {
+            "以下字段会在保存时自动重新生成。留空表示使用自动值。"
+        }
+        "Field" => "字段",
+        "Auto value" => "自动值",
+        "Override" => "覆盖",
+        "Refresh" => "刷新",
+        "Keep extra fields (not in the profile key list)" => {
+            "保留额外字段（不在 profile 键列表中的旧字段）"
+        }
+        "auto" => "自动",
+        "ActorInfo overrides applied" => "ActorInfo 覆盖已应用",
+        "from name" => "来源：Actor 名称",
+        "from far variant" => "来源：Far 变体",
+        "from ProfileUser link" => "来源：ProfileUser 链接",
+        "from actor link tags" => "来源：Actor Link 标签",
+        "from save rules" => "来源：保存规则",
+        "extracted from link files" => "来源：从链接文件提取",
         // Misc messages
         "No actor loaded. Use File → Open Vanilla Actor or Open Mod Actor." => {
             "未加载 Actor。使用 文件 → 打开原始 Actor 或 打开 Mod Actor。"
