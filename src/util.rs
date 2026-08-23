@@ -181,21 +181,21 @@ pub fn find_file(rel_path: &str) -> anyhow::Result<FoundFile> {
     let rel = Path::new(rel_path);
     let stem = rel.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
     if RESIDENT_ACTORS.contains(&stem.as_str()) {
-        let titlebg = PathBuf::from(&settings.update_dir).join("Pack").join("TitleBG.pack");
+        let titlebg = PathBuf::from(settings.update()).join("Pack").join("TitleBG.pack");
         return Ok(FoundFile::Resident {
             titlebg,
             inner: rel_path.to_string(),
         });
     }
-    let base = PathBuf::from(&settings.update_dir);
-    if base.join(rel).exists() {
-        return Ok(FoundFile::Path(base.join(rel)));
-    }
-    let base = PathBuf::from(&settings.dlc_dir);
+    let base = PathBuf::from(settings.update());
     if !base.as_os_str().is_empty() && base.join(rel).exists() {
         return Ok(FoundFile::Path(base.join(rel)));
     }
-    let base = PathBuf::from(&settings.game_dir);
+    let base = PathBuf::from(settings.dlc());
+    if !base.as_os_str().is_empty() && base.join(rel).exists() {
+        return Ok(FoundFile::Path(base.join(rel)));
+    }
+    let base = PathBuf::from(settings.game());
     if !base.as_os_str().is_empty() && base.join(rel).exists() {
         return Ok(FoundFile::Path(base.join(rel)));
     }

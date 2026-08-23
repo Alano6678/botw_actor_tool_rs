@@ -7,10 +7,25 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Settings {
+    /// Which platform the editor targets: "wiiu" (big-endian) or "switch".
+    #[serde(default = "default_platform")]
+    pub platform: String,
+    // Wii U directories.
     pub game_dir: String,
     pub update_dir: String,
     pub dlc_dir: String,
+    // Switch directories.
+    #[serde(default)]
+    pub switch_game_dir: String,
+    #[serde(default)]
+    pub switch_update_dir: String,
+    #[serde(default)]
+    pub switch_dlc_dir: String,
+    /// Wii U game text language.
     pub lang: String,
+    /// Switch game text language (independent of the Wii U one).
+    #[serde(default = "default_lang")]
+    pub switch_lang: String,
     #[serde(default = "default_ui_lang")]
     pub ui_lang: String,
     #[serde(default)]
@@ -31,13 +46,26 @@ fn default_ui_lang() -> String {
     "en".to_string()
 }
 
+fn default_platform() -> String {
+    "wiiu".to_string()
+}
+
+fn default_lang() -> String {
+    "USen".to_string()
+}
+
 impl Default for Settings {
     fn default() -> Self {
         Settings {
+            platform: default_platform(),
             game_dir: String::new(),
             update_dir: String::new(),
             dlc_dir: String::new(),
+            switch_game_dir: String::new(),
+            switch_update_dir: String::new(),
+            switch_dlc_dir: String::new(),
             lang: "USen".to_string(),
+            switch_lang: "USen".to_string(),
             ui_lang: default_ui_lang(),
             dark_theme: false,
             show_unsupported_tabs: false,
@@ -89,6 +117,48 @@ impl Settings {
         let text = serde_json::to_string_pretty(self)?;
         std::fs::write(path, text)?;
         Ok(())
+    }
+
+    /// Is the current platform Switch (little-endian)?
+    pub fn is_switch(&self) -> bool {
+        self.platform == "switch"
+    }
+
+    /// Active game directory for the current platform.
+    pub fn game(&self) -> &str {
+        if self.is_switch() {
+            &self.switch_game_dir
+        } else {
+            &self.game_dir
+        }
+    }
+
+    /// Active update directory for the current platform.
+    pub fn update(&self) -> &str {
+        if self.is_switch() {
+            &self.switch_update_dir
+        } else {
+            &self.update_dir
+        }
+    }
+
+    /// Active DLC directory for the current platform.
+    pub fn dlc(&self) -> &str {
+        if self.is_switch() {
+            &self.switch_dlc_dir
+        } else {
+            &self.dlc_dir
+        }
+    }
+
+    /// Active game text language for the current platform (each platform has
+    /// its own language setting).
+    pub fn active_lang(&self) -> &str {
+        if self.is_switch() {
+            &self.switch_lang
+        } else {
+            &self.lang
+        }
     }
 
     pub fn validate_game_dir(&self, game_path: &str) -> bool {

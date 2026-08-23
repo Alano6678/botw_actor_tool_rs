@@ -865,10 +865,15 @@ impl ActorSelectState {
 }
 
 pub struct SettingsPanelState {
+    pub platform: String,
     pub game_dir: String,
     pub update_dir: String,
     pub dlc_dir: String,
+    pub switch_game_dir: String,
+    pub switch_update_dir: String,
+    pub switch_dlc_dir: String,
     pub lang: String,
+    pub switch_lang: String,
     pub ui_lang: String,
     pub dark: bool,
     pub show_unsupported_tabs: bool,
@@ -877,10 +882,15 @@ pub struct SettingsPanelState {
 impl SettingsPanelState {
     pub fn new(s: &Settings) -> Self {
         SettingsPanelState {
+            platform: s.platform.clone(),
             game_dir: s.game_dir.clone(),
             update_dir: s.update_dir.clone(),
             dlc_dir: s.dlc_dir.clone(),
+            switch_game_dir: s.switch_game_dir.clone(),
+            switch_update_dir: s.switch_update_dir.clone(),
+            switch_dlc_dir: s.switch_dlc_dir.clone(),
             lang: s.lang.clone(),
+            switch_lang: s.switch_lang.clone(),
             ui_lang: s.ui_lang.clone(),
             dark: s.dark_theme,
             show_unsupported_tabs: s.show_unsupported_tabs,
@@ -1056,15 +1066,10 @@ impl App {
 
     fn run_save(&mut self, root_dir: &PathBuf) {
         let ui_lang = self.ui_lang;
-        let be = match root_dir.file_name().and_then(|n| n.to_str()) {
-            Some("romfs") => false,
-            Some("content") => true,
-            _ => {
-                self.msg =
-                    Some(Msg::Ok(ty(ui_lang, "Must choose either content or romfs!").to_string()));
-                return;
-            }
-        };
+        // Endianness follows the target platform (Wii U is big-endian, Switch
+        // is little-endian), not the mod folder name — so any content/romfs
+        // folder name works.
+        let be = !self.settings.is_switch();
         match self.actor.as_mut().map(|a| a.save(root_dir, be)) {
             Some(Ok(())) => {
                 self.status = Some(format!("{}{}", ty(ui_lang, "Saved to "), root_dir.display()))
@@ -1227,10 +1232,20 @@ impl App {
         let ui_lang = self.ui_lang;
         let ctx = ui.ctx().clone();
 
-        if ctx.input(|i| i.modifiers.command && i.key_pressed(Key::N)) {
+        if ctx.input(|i| i.modifiers.command && !i.modifiers.shift && i.key_pressed(Key::N)) {
+            self.settings.platform = "wiiu".to_string();
             self.on_open_vanilla();
         }
-        if ctx.input(|i| i.modifiers.command && i.key_pressed(Key::O)) {
+        if ctx.input(|i| i.modifiers.command && i.modifiers.shift && i.key_pressed(Key::N)) {
+            self.settings.platform = "switch".to_string();
+            self.on_open_vanilla();
+        }
+        if ctx.input(|i| i.modifiers.command && !i.modifiers.shift && i.key_pressed(Key::O)) {
+            self.settings.platform = "wiiu".to_string();
+            self.on_open_mod();
+        }
+        if ctx.input(|i| i.modifiers.command && i.modifiers.shift && i.key_pressed(Key::O)) {
+            self.settings.platform = "switch".to_string();
             self.on_open_mod();
         }
         if ctx.input(|i| i.modifiers.command && i.key_pressed(Key::S)) {
@@ -1273,10 +1288,26 @@ impl App {
         egui::Panel::top("menu").show(ui, |ui| {
             egui::MenuBar::new().ui(ui, |ui| {
                 ui.menu_button(ty(ui_lang, "File"), |ui| {
-                    if ui.button(ty(ui_lang, "Open Vanilla Actor\tCtrl+N")).clicked() {
+                    if ui.button(ty(ui_lang, "Open Vanilla Actor (Wii U)\tCtrl+N")).clicked() {
+                        self.settings.platform = "wiiu".to_string();
                         self.on_open_vanilla();
                     }
-                    if ui.button(ty(ui_lang, "Open Mod Actor\tCtrl+O")).clicked() {
+                    if ui
+                        .button(ty(ui_lang, "Open Vanilla Actor (Switch)\tCtrl+Shift+N"))
+                        .clicked()
+                    {
+                        self.settings.platform = "switch".to_string();
+                        self.on_open_vanilla();
+                    }
+                    if ui.button(ty(ui_lang, "Open Mod Actor (Wii U)\tCtrl+O")).clicked() {
+                        self.settings.platform = "wiiu".to_string();
+                        self.on_open_mod();
+                    }
+                    if ui
+                        .button(ty(ui_lang, "Open Mod Actor (Switch)\tCtrl+Shift+O"))
+                        .clicked()
+                    {
+                        self.settings.platform = "switch".to_string();
                         self.on_open_mod();
                     }
                     if ui.button(ty(ui_lang, "Save Actor\tCtrl+S")).clicked() {
@@ -1443,7 +1474,7 @@ impl App {
 
     fn on_open_vanilla(&mut self) {
         let ui_lang = self.ui_lang;
-        let dir = PathBuf::from(&self.settings.update_dir);
+        let dir = PathBuf::from(self.settings.update());
         if !dir.exists() {
             self.msg = Some(Msg::Ok(
                 ty(ui_lang, "Update directory is not set or does not exist. Open Settings first.")
@@ -2084,7 +2115,7 @@ impl App {
 
     /// Locate `Pack/Bootup.pack` (game dir, then update dir), for flags.
     fn bootup_path(&self) -> Option<PathBuf> {
-        for base in [&self.settings.game_dir, &self.settings.update_dir] {
+        for base in [self.settings.game(), self.settings.update()] {
             if base.is_empty() {
                 continue;
             }
@@ -2379,52 +2410,83 @@ impl App {
             .anchor(Align2::CENTER_CENTER, [0.0, 0.0])
             .show(ctx, |ui| {
                 ui.horizontal(|ui| {
-                    ui.label(ty(ui_lang, "Game Directory"));
-                    ui.add(
-                        egui::TextEdit::singleline(&mut panel.game_dir).desired_width(280.0),
-                    );
+                    ui.label(ty(ui_lang, "Platform"));
+                    let mut p = if panel.platform == "switch" { 1 } else { 0 };
+                    egui::ComboBox::from_id_salt("platform")
+                        .selected_text(if p == 0 { "Wii U" } else { "Switch" })
+                        .show_ui(ui, |ui| {
+                            ui.selectable_value(&mut p, 0, "Wii U");
+                            ui.selectable_value(&mut p, 1, "Switch");
+                        });
+                    panel.platform = if p == 0 { "wiiu".into() } else { "switch".into() };
+                });
+                let is_switch = panel.platform == "switch";
+                let (gkey, ukey, dkey) = if is_switch {
+                    ("Switch Game Directory", "Switch Update Directory", "Switch DLC Directory")
+                } else {
+                    ("Game Directory", "Update Directory", "DLC Directory")
+                };
+                ui.horizontal(|ui| {
+                    ui.label(ty(ui_lang, gkey));
+                    let field = if is_switch {
+                        &mut panel.switch_game_dir
+                    } else {
+                        &mut panel.game_dir
+                    };
+                    ui.add(egui::TextEdit::singleline(field).desired_width(280.0));
                     if ui.button(ty(ui_lang, "Browse…")).clicked() {
                         if let Some(d) = rfd::FileDialog::new().pick_folder() {
-                            panel.game_dir = d.to_string_lossy().to_string();
+                            *field = d.to_string_lossy().to_string();
                         }
                     }
                 });
                 ui.horizontal(|ui| {
-                    ui.label(ty(ui_lang, "Update Directory"));
-                    ui.add(
-                        egui::TextEdit::singleline(&mut panel.update_dir).desired_width(280.0),
-                    );
+                    ui.label(ty(ui_lang, ukey));
+                    let field = if is_switch {
+                        &mut panel.switch_update_dir
+                    } else {
+                        &mut panel.update_dir
+                    };
+                    ui.add(egui::TextEdit::singleline(field).desired_width(280.0));
                     if ui.button(ty(ui_lang, "Browse…")).clicked() {
                         if let Some(d) = rfd::FileDialog::new().pick_folder() {
-                            panel.update_dir = d.to_string_lossy().to_string();
+                            *field = d.to_string_lossy().to_string();
                         }
                     }
                 });
                 ui.horizontal(|ui| {
-                    ui.label(ty(ui_lang, "DLC Directory"));
-                    ui.add(
-                        egui::TextEdit::singleline(&mut panel.dlc_dir).desired_width(280.0),
-                    );
+                    ui.label(ty(ui_lang, dkey));
+                    let field = if is_switch {
+                        &mut panel.switch_dlc_dir
+                    } else {
+                        &mut panel.dlc_dir
+                    };
+                    ui.add(egui::TextEdit::singleline(field).desired_width(280.0));
                     if ui.button(ty(ui_lang, "Browse…")).clicked() {
                         if let Some(d) = rfd::FileDialog::new().pick_folder() {
-                            panel.dlc_dir = d.to_string_lossy().to_string();
+                            *field = d.to_string_lossy().to_string();
                         }
                     }
                 });
                 ui.horizontal(|ui| {
                     ui.label(ty(ui_lang, "Language"));
+                    let lang_field = if is_switch {
+                        &mut panel.switch_lang
+                    } else {
+                        &mut panel.lang
+                    };
                     let mut selected_lang = util::LANGUAGES
                         .iter()
-                        .position(|l| *l == panel.lang)
+                        .position(|l| *l == *lang_field)
                         .unwrap_or(0);
                     egui::ComboBox::from_id_salt("lang")
-                        .selected_text(panel.lang.clone())
+                        .selected_text(lang_field.clone())
                         .show_ui(ui, |ui| {
                             for (i, lang) in util::LANGUAGES.iter().enumerate() {
                                 ui.selectable_value(&mut selected_lang, i, *lang);
                             }
                         });
-                    panel.lang = util::LANGUAGES[selected_lang].to_string();
+                    *lang_field = util::LANGUAGES[selected_lang].to_string();
                 });
                 ui.horizontal(|ui| {
                     ui.label(ty(ui_lang, "UI Language"));
@@ -2446,19 +2508,32 @@ impl App {
                 ui.horizontal(|ui| {
                     if ui.button(ty(ui_lang, "Accept")).clicked() {
                         let test = Settings {
+                            platform: panel.platform.clone(),
                             game_dir: panel.game_dir.clone(),
                             update_dir: panel.update_dir.clone(),
                             dlc_dir: panel.dlc_dir.clone(),
+                            switch_game_dir: panel.switch_game_dir.clone(),
+                            switch_update_dir: panel.switch_update_dir.clone(),
+                            switch_dlc_dir: panel.switch_dlc_dir.clone(),
                             lang: panel.lang.clone(),
+                            switch_lang: panel.switch_lang.clone(),
                             ui_lang: panel.ui_lang.clone(),
                             dark_theme: panel.dark,
                             show_unsupported_tabs: panel.show_unsupported_tabs,
                             ..Settings::default()
                         };
+                        // Validate the directories of the platform shown in the
+                        // panel (each platform has its own set).
+                        let cur_switch = panel.platform == "switch";
+                        let (g, u, d) = if cur_switch {
+                            (&panel.switch_game_dir, &panel.switch_update_dir, &panel.switch_dlc_dir)
+                        } else {
+                            (&panel.game_dir, &panel.update_dir, &panel.dlc_dir)
+                        };
                         let fails = [
-                            (ty(ui_lang, "Game directory"), test.validate_game_dir(&panel.game_dir)),
-                            (ty(ui_lang, "Update directory"), test.validate_update_dir(&panel.update_dir)),
-                            (ty(ui_lang, "DLC directory"), test.validate_dlc_dir(&panel.dlc_dir)),
+                            (ty(ui_lang, "Game directory"), test.validate_game_dir(g)),
+                            (ty(ui_lang, "Update directory"), test.validate_update_dir(u)),
+                            (ty(ui_lang, "DLC directory"), test.validate_dlc_dir(d)),
                         ]
                         .iter()
                         .filter(|(_, ok)| !*ok)

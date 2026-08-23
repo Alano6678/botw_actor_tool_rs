@@ -24,7 +24,7 @@ pub struct ActorTexts {
 
 impl ActorTexts {
     pub fn new(pack: &Path, profile: &str) -> Self {
-        Self::new_with_lang(pack, profile, Settings::load().lang.clone())
+        Self::new_with_lang(pack, profile, Settings::load().active_lang().to_string())
     }
 
     pub fn new_with_lang(pack: &Path, profile: &str, lang: String) -> Self {

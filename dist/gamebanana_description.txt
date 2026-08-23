@@ -1,0 +1,63 @@
+BotW Actor Tool (Rust + egui) — standalone actor editor for Breath of the Wild
+
+A free, standalone actor editor for The Legend of Zelda: Breath of the Wild,
+rewritten from the original Python tool in Rust + egui. No Python, no
+dependencies — just a single .exe.
+
+=====================================================================
+WHAT IT DOES
+=====================================================================
+Edit an actor's data files directly: Actor Link, every link file as YAML
+(AAMP/BYML), Texts (MSBT), ActorInfo and GameData Flags. On save it
+regenerates ActorInfo.product.sbyml, the text files and the GameData
+flags (gamedata.ssarc / savedataformat.ssarc) automatically.
+
+Features
+- Open vanilla actors (Ctrl+N) or actors from a mod directory (Ctrl+O),
+  including TitleBG.pack-resident actors and *_Far variants.
+- Actor Link panel: name + priority, every link as Dummy / ActorName /
+  Custom, custom-file import, tags.
+- VS Code-style YAML editors for every link file: line numbers, syntax
+  highlighting, an accurate caret, and a find bar (Ctrl+F) with match
+  highlighting, Enter-to-jump and a case toggle.
+- Texts tab: BaseName / Name / Desc / PictureBook per language.
+- ActorInfo tab: previews every field regenerated on save, with manual
+  overrides and a "keep extra fields" option.
+- Flags tab: lists the GameData flags (bool/s32) for the actor — edit
+  values, add or delete flags.
+- Localized UI: English / 中文 (independent of the game's text language).
+- Dark mode with a complete theme and boosted text contrast.
+- Settings toggle to show the unsupported Elink/Profile/Slink/Xlink tabs.
+
+=====================================================================
+INSTALL / RUN
+=====================================================================
+1. Unzip anywhere and run botw_actor_tool_rs.exe (no install required).
+2. Open Settings and set your Game / Update / DLC directories (unpacked
+   ROM directories).
+3. Ctrl+N: pick a vanilla actor from the update directory.
+4. Ctrl+O: pick your mod's content or romfs directory, then an actor.
+5. Ctrl+S: pick the mod directory to save (must be named content for
+   big-endian/Wii U or romfs for little-endian/Switch).
+
+Requires Windows 10/11 x64 and the Microsoft Visual C++ Redistributable
+(vc_redist) if it is missing.
+
+=====================================================================
+CREDITS / LICENSE
+=====================================================================
+- Faithful rewrite of GingerAvalanche's botw_actor_tool
+  (https://github.com/GingerAvalanche/botw_actor_tool).
+- Formats handled by roead / msyt / msbt-rs.
+- License: AGPL-3.0-or-later. Source code:
+  https://github.com/Alano6678/botw_actor_tool_rs
+
+=====================================================================
+CHANGELOG (0.1.5)
+=====================================================================
+- Slimmer + faster release (lto=fat, codegen-units=1, strip): 20.4 MB -> 18 MB
+- ActorInfo editor page (auto values + overrides)
+- Flags editor (edit/add/delete GameData flags)
+- Bolder UI font + higher dark-mode contrast
+- Settings toggle to show the unsupported Elink/Profile/Slink/Xlink tabs
+- Unify the ActorInfo / Flags editor layouts
