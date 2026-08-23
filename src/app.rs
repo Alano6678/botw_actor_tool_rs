@@ -1582,8 +1582,11 @@ impl App {
             ui.separator();
             ui.horizontal(|ui| {
                 ui.label(ty(ui_lang, "Tags:"));
+                // Fill the remaining row width (minus the Apply button), so
+                // long tag lists are readable; clamp for narrow windows.
+                let tags_w = (ui.available_width() - 70.0).max(120.0);
                 ui.add(
-                    egui::TextEdit::singleline(&mut panel.tags_input).desired_width(220.0),
+                    egui::TextEdit::singleline(&mut panel.tags_input).desired_width(tags_w),
                 );
                 if ui.button(ty(ui_lang, "Apply")).clicked() {
                     let t = panel.tags_input.clone();
