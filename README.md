@@ -11,6 +11,15 @@ the text files and the GameData flags, all regenerated automatically.
 The goal is a faithful port: same workflow and behavior as the original,
 with a modern GUI and a few improvements (see *Differences* below).
 
+## About
+
+- **Repository**: [https://github.com/Alano6678/botw_actor_tool_rs](https://github.com/Alano6678/botw_actor_tool_rs)
+- **Language**: Rust + egui (desktop GUI); every file format is handled by
+  libraries ([roead](https://github.com/NiceneNerd/roead) / [msyt](https://github.com/NiceneNerd/msyt) / [msbt-rs](https://github.com/NiceneNerd/msbt-rs))
+- **License**: AGPL-3.0-or-later
+- **Status**: feature-faithful port of the original Python
+  [botw_actor_tool](https://github.com/GingerAvalanche/botw_actor_tool)
+
 ## Features
 
 - Open vanilla actors from your game dump (`Ctrl+N`) or actors from a mod
@@ -138,6 +147,15 @@ AGPLv3 is compatible).
 Actor Link（Dummy / ActorName / Custom + 自定义链接导入）、按 YAML 编辑各链接
 文件（AAMP/BYML）、编辑 Texts（MSBT）、暗色主题、设置，以及保存时回写
 `ActorInfo.product.sbyml`、文本与 GameData Flags（全部由程序自动重新生成）。
+
+### 关于
+
+- **仓库**：[https://github.com/Alano6678/botw_actor_tool_rs](https://github.com/Alano6678/botw_actor_tool_rs)
+- **语言**：Rust + egui（桌面 GUI），所有文件格式均由库处理
+  （[roead](https://github.com/NiceneNerd/roead) / [msyt](https://github.com/NiceneNerd/msyt) / [msbt-rs](https://github.com/NiceneNerd/msbt-rs)）
+- **许可**：AGPL-3.0-or-later
+- **状态**：原版 Python [botw_actor_tool](https://github.com/GingerAvalanche/botw_actor_tool)
+  的功能忠实移植版
 
 ### 功能
 
