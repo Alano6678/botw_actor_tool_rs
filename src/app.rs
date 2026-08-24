@@ -42,6 +42,7 @@ mod tests {
             info_panel: None,
             flags_panel: None,
             misc_view: None,
+            misc_rename_input: String::new(),
             actor_select: None,
             settings_panel: None,
             save_dir_request: false,
@@ -127,6 +128,7 @@ mod tests {
             info_panel: None,
             flags_panel: None,
             misc_view: None,
+            misc_rename_input: String::new(),
             actor_select: None,
             settings_panel: None,
             save_dir_request: false,
@@ -224,6 +226,7 @@ mod tests {
             info_panel: None,
             flags_panel: None,
             misc_view: None,
+            misc_rename_input: String::new(),
             actor_select: None,
             settings_panel: None,
             save_dir_request: false,
@@ -376,6 +379,7 @@ mod tests {
             info_panel: None,
             flags_panel: None,
             misc_view: None,
+            misc_rename_input: String::new(),
             actor_select: None,
             settings_panel: None,
             save_dir_request: false,
@@ -564,6 +568,7 @@ mod tests {
             info_panel: None,
             flags_panel: None,
             misc_view: None,
+            misc_rename_input: String::new(),
             actor_select: None,
             settings_panel: None,
             save_dir_request: false,
@@ -925,6 +930,7 @@ pub struct App {
     pub info_panel: Option<InfoPanelState>,
     pub flags_panel: Option<FlagsPanelState>,
     pub misc_view: Option<(String, usize)>,
+    pub misc_rename_input: String,
     pub actor_select: Option<ActorSelectState>,
     pub settings_panel: Option<SettingsPanelState>,
     pub save_dir_request: bool,
@@ -956,6 +962,7 @@ impl App {
             info_panel: None,
             flags_panel: None,
             misc_view: None,
+            misc_rename_input: String::new(),
             actor_select: None,
             settings_panel: None,
             save_dir_request: false,
@@ -1031,6 +1038,7 @@ impl App {
         self.info_panel = None;
         self.flags_panel = None;
         self.misc_view = None;
+        self.misc_rename_input.clear();
         let name = self.actor.as_ref().map(|a| a.get_name()).unwrap_or_default();
         self.link_panel = self.actor.as_ref().map(LinkPanelState::new);
         if self.actor.is_some() {
@@ -1520,6 +1528,7 @@ impl App {
         };
         let name = actor.get_name();
         let mut editable: Vec<(String, Option<usize>)> = Vec::new();
+        editable.push((format!("Actor/ActorLink/{name}.bxml"), Some(0)));
         for link in actor.pack.link_file_names() {
             let tab = LINK_TO_TAB
                 .iter()
@@ -1536,67 +1545,104 @@ impl App {
             .collect();
 
         ui.vertical(|ui| {
-            ui.label(RichText::new(format!("{name}.sbactorpack")).strong());
-            ui.label(
-                RichText::new(format!("Actor/Pack/{name}.sbactorpack"))
-                    .small()
-                    .weak(),
-            );
-            ui.separator();
-            for (path, tab) in &editable {
-                let sel = tab.map(|t| self.tab == t).unwrap_or(false);
-                if ui.selectable_label(sel, path).clicked() {
-                    if let Some(t) = tab {
-                        self.switch_tab(*t);
+            egui::CollapsingHeader::new(format!("📦 Actor/Pack/{name}.sbactorpack"))
+                .default_open(true)
+                .show(ui, |ui| {
+                    for (path, tab) in &editable {
+                        let sel = tab.map(|t| self.tab == t).unwrap_or(false);
+                        if ui.selectable_label(sel, format!("  {path}")).clicked() {
+                            if let Some(t) = tab {
+                                self.switch_tab(*t);
+                            }
+                        }
                     }
-                }
-            }
-            if !misc.is_empty() {
-                ui.add_space(4.0);
-                ui.label(
-                    RichText::new(ty(ui_lang, "Read-only")).small().weak(),
-                );
-                for (p, size) in &misc {
-                    let sel = self.misc_view.as_ref().map(|(mp, _)| mp == p).unwrap_or(false)
-                        && self.tab == 28;
-                    if ui.selectable_label(sel, p).clicked() {
-                        self.misc_view = Some((p.clone(), *size));
-                        self.tab = 28;
+                    if !misc.is_empty() {
+                        ui.add_space(2.0);
+                        ui.label(
+                            RichText::new(ty(ui_lang, "Read-only")).small().weak(),
+                        );
+                        for (p, size) in &misc {
+                            let sel = self
+                                .misc_view
+                                .as_ref()
+                                .map(|(mp, _)| mp == p)
+                                .unwrap_or(false)
+                                && self.tab == 28;
+                            if ui.selectable_label(sel, format!("  {p}")).clicked() {
+                                self.misc_view = Some((p.clone(), *size));
+                                self.misc_rename_input = p.clone();
+                                self.tab = 28;
+                            }
+                        }
                     }
-                }
-                ui.separator();
-            }
+                });
             ui.add_space(4.0);
-            ui.label(RichText::new(ty(ui_lang, "Global")).small().weak());
-            if ui
-                .selectable_label(self.tab == 26, "Actor/ActorInfo.product.sbyml")
-                .clicked()
-            {
-                self.switch_tab(26);
-            }
-            if ui
-                .selectable_label(self.tab == 27, "Pack/Bootup.pack")
-                .clicked()
-            {
-                self.switch_tab(27);
-            }
+            egui::CollapsingHeader::new(ty(ui_lang, "Global"))
+                .default_open(true)
+                .show(ui, |ui| {
+                    if ui
+                        .selectable_label(self.tab == 26, "  Actor/ActorInfo.product.sbyml")
+                        .clicked()
+                    {
+                        self.switch_tab(26);
+                    }
+                    if ui
+                        .selectable_label(self.tab == 27, "  Pack/Bootup.pack")
+                        .clicked()
+                    {
+                        self.switch_tab(27);
+                    }
+                });
         });
     }
 
-    /// Read-only view of a non-editable pack file (physics/cloth/AS/misc).
+    /// View of a non-editable pack file (physics/cloth/AS/misc), which can be
+    /// replaced with another file or renamed to a new in-pack path.
     fn show_misc_view(&mut self, ui: &mut egui::Ui) {
         let ui_lang = self.ui_lang;
-        if let Some((path, size)) = &self.misc_view {
-            ui.label(RichText::new(path).strong());
-            ui.add_space(6.0);
-            ui.label(format!("{}: {} bytes", ty(ui_lang, "Size"), size));
-            ui.add_space(4.0);
-            ui.label(
-                ty(ui_lang, "This file is not editable — it is kept as-is when saving."),
-            );
-        } else {
+        let selected = self.misc_view.clone();
+        let Some((path, size)) = selected else {
             ui.label(ty(ui_lang, "Select a file on the left."));
+            return;
+        };
+        ui.label(RichText::new(&path).strong());
+        ui.add_space(6.0);
+        ui.label(format!("{}: {} bytes", ty(ui_lang, "Size"), size));
+        ui.add_space(4.0);
+        ui.label(
+            ty(ui_lang, "This file is not editable directly — you can replace it or rename it."),
+        );
+        ui.separator();
+        if ui.button(ty(ui_lang, "Replace file…")).clicked() {
+            if let Some(file) = rfd::FileDialog::new().pick_file() {
+                if let Ok(data) = std::fs::read(&file) {
+                    if let Some(a) = self.actor.as_mut() {
+                        a.pack.replace_misc(&path, data);
+                        self.misc_view =
+                            Some((path.clone(), a.pack.misc_size(&path)));
+                        self.status =
+                            Some(format!("{} {}", ty(ui_lang, "Replaced"), path));
+                    }
+                }
+            }
         }
+        ui.horizontal(|ui| {
+            ui.label(ty(ui_lang, "Rename to:"));
+            ui.add(
+                egui::TextEdit::singleline(&mut self.misc_rename_input)
+                    .desired_width(300.0),
+            );
+            if ui.button(ty(ui_lang, "Rename")).clicked() {
+                let new = self.misc_rename_input.trim().to_string();
+                if !new.is_empty() && new != path {
+                    if let Some(a) = self.actor.as_mut() {
+                        a.pack.rename_misc(&path, &new);
+                        self.misc_view = Some((new.clone(), a.pack.misc_size(&new)));
+                        self.misc_rename_input = new.clone();
+                    }
+                }
+            }
+        });
     }
 
     fn on_open_vanilla(&mut self) {

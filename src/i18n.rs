@@ -59,6 +59,13 @@ pub fn tr(lang: UiLang, key: &str) -> &str {
         "This file is not editable — it is kept as-is when saving." => {
             "此文件不可编辑——保存时按原样保留。"
         }
+        "This file is not editable directly — you can replace it or rename it." => {
+            "此文件不可直接编辑——但你可以替换它或重命名它。"
+        }
+        "Replace file…" => "替换文件…",
+        "Rename to:" => "重命名为：",
+        "Rename" => "重命名",
+        "Replaced" => "已替换",
         "Save Actor\tCtrl+S" => "保存 Actor\tCtrl+S",
         "Quit\tCtrl+Q" => "退出\tCtrl+Q",
         "Edit" => "编辑",

@@ -319,6 +319,18 @@ impl ActorPack {
         self.miscfiles.get(path).map(|d| d.len()).unwrap_or(0)
     }
 
+    /// Replace the contents of a misc file (or insert if it is new).
+    pub fn replace_misc(&mut self, path: &str, data: Vec<u8>) {
+        self.miscfiles.insert(path.to_string(), data);
+    }
+
+    /// Rename a misc file's path key (moving it to a new in-pack location).
+    pub fn rename_misc(&mut self, old: &str, new: &str) {
+        if let Some(data) = self.miscfiles.remove(old) {
+            self.miscfiles.insert(new.to_string(), data);
+        }
+    }
+
     pub fn set_tags(&mut self, tags: &str) {
         self.tags = tags.split(", ").map(|s| s.to_string()).collect();
     }
