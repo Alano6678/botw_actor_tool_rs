@@ -41,6 +41,7 @@ mod tests {
             texts_panel: None,
             info_panel: None,
             flags_panel: None,
+            misc_view: None,
             actor_select: None,
             settings_panel: None,
             save_dir_request: false,
@@ -125,6 +126,7 @@ mod tests {
             texts_panel: None,
             info_panel: None,
             flags_panel: None,
+            misc_view: None,
             actor_select: None,
             settings_panel: None,
             save_dir_request: false,
@@ -221,6 +223,7 @@ mod tests {
             texts_panel: None,
             info_panel: None,
             flags_panel: None,
+            misc_view: None,
             actor_select: None,
             settings_panel: None,
             save_dir_request: false,
@@ -372,6 +375,7 @@ mod tests {
             texts_panel: None,
             info_panel: None,
             flags_panel: None,
+            misc_view: None,
             actor_select: None,
             settings_panel: None,
             save_dir_request: false,
@@ -559,6 +563,7 @@ mod tests {
             texts_panel: None,
             info_panel: None,
             flags_panel: None,
+            misc_view: None,
             actor_select: None,
             settings_panel: None,
             save_dir_request: false,
@@ -866,6 +871,7 @@ impl ActorSelectState {
 
 pub struct SettingsPanelState {
     pub platform: String,
+    pub view_mode: String,
     pub game_dir: String,
     pub update_dir: String,
     pub dlc_dir: String,
@@ -883,6 +889,7 @@ impl SettingsPanelState {
     pub fn new(s: &Settings) -> Self {
         SettingsPanelState {
             platform: s.platform.clone(),
+            view_mode: s.view_mode.clone(),
             game_dir: s.game_dir.clone(),
             update_dir: s.update_dir.clone(),
             dlc_dir: s.dlc_dir.clone(),
@@ -917,6 +924,7 @@ pub struct App {
     pub texts_panel: Option<TextsPanelState>,
     pub info_panel: Option<InfoPanelState>,
     pub flags_panel: Option<FlagsPanelState>,
+    pub misc_view: Option<(String, usize)>,
     pub actor_select: Option<ActorSelectState>,
     pub settings_panel: Option<SettingsPanelState>,
     pub save_dir_request: bool,
@@ -947,6 +955,7 @@ impl App {
             texts_panel: None,
             info_panel: None,
             flags_panel: None,
+            misc_view: None,
             actor_select: None,
             settings_panel: None,
             save_dir_request: false,
@@ -1021,6 +1030,7 @@ impl App {
         self.texts_panel = None;
         self.info_panel = None;
         self.flags_panel = None;
+        self.misc_view = None;
         let name = self.actor.as_ref().map(|a| a.get_name()).unwrap_or_default();
         self.link_panel = self.actor.as_ref().map(LinkPanelState::new);
         if self.actor.is_some() {
@@ -1370,35 +1380,14 @@ impl App {
 
         egui::Panel::left("props")
             .resizable(true)
-            .default_size(210.0)
+            .default_size(230.0)
             .show(ui, |ui| {
                 ui.add_space(4.0);
-                ui.vertical(|ui| {
-                    for (i, tab) in TABS.iter().enumerate() {
-                        // Hide the "not supported" link tabs (Elink / Profile /
-                        // Slink / Xlink) unless the user enables them in
-                        // Settings → "Show unsupported tabs".
-                        let link = LINK_TO_TAB
-                            .iter()
-                            .find(|(t, _)| *t == i)
-                            .map(|(_, l)| *l);
-                        if !self.settings.show_unsupported_tabs
-                            && link.map(|l| NOT_IMPLEMENTED.contains(&l)).unwrap_or(false)
-                        {
-                            continue;
-                        }
-                        let enabled = self.tab_enabled(i);
-                        let mut text = RichText::new(ty(ui_lang, tab));
-                        if !enabled {
-                            text = text.weak();
-                        }
-                        let clicked =
-                            ui.selectable_label(self.tab == i && enabled, text).clicked();
-                        if clicked && enabled {
-                            self.switch_tab(i);
-                        }
-                    }
-                });
+                if self.settings.is_file_view() {
+                    self.show_file_view(ui);
+                } else {
+                    self.show_feature_tabs(ui);
+                }
             });
 
         egui::CentralPanel::default().show(ui, |ui| {
@@ -1472,6 +1461,144 @@ impl App {
         }
     }
 
+    /// Left sidebar in "feature view": the function tabs (Actor Link, each
+    /// link file, Texts, ActorInfo, Flags).
+    fn show_feature_tabs(&mut self, ui: &mut egui::Ui) {
+        let ui_lang = self.ui_lang;
+        ui.vertical(|ui| {
+            for (i, tab) in TABS.iter().enumerate() {
+                // Hide the "not supported" link tabs (Elink / Profile /
+                // Slink / Xlink) unless the user enables them in
+                // Settings → "Show unsupported tabs".
+                let link = LINK_TO_TAB
+                    .iter()
+                    .find(|(t, _)| *t == i)
+                    .map(|(_, l)| *l);
+                if !self.settings.show_unsupported_tabs
+                    && link.map(|l| NOT_IMPLEMENTED.contains(&l)).unwrap_or(false)
+                {
+                    continue;
+                }
+                let enabled = self.tab_enabled(i);
+                let mut text = RichText::new(ty(ui_lang, tab));
+                if !enabled {
+                    text = text.weak();
+                }
+                let clicked =
+                    ui.selectable_label(self.tab == i && enabled, text).clicked();
+                if clicked && enabled {
+                    self.switch_tab(i);
+                }
+            }
+        });
+    }
+
+    /// File display path for an editable link (e.g.
+    /// `Actor/GeneralParamList/<ref>.bgparamlist`).
+    fn link_display_path(actor: &BATActor, link: &str) -> String {
+        let linkref = actor.get_link(link);
+        if let Some((_, (folder, ext))) =
+            util::AAMP_LINK_REFS.iter().find(|(l, _)| *l == link)
+        {
+            return format!("Actor/{folder}/{linkref}{ext}");
+        }
+        if let Some((_, (folder, ext))) =
+            util::BYML_LINK_REFS.iter().find(|(l, _)| *l == link)
+        {
+            return format!("Actor/{folder}/{linkref}{ext}");
+        }
+        link.to_string()
+    }
+
+    /// Left sidebar in "file view": list the actor pack's files (editable
+    /// links + read-only files) and the global files (ActorInfo / Bootup).
+    fn show_file_view(&mut self, ui: &mut egui::Ui) {
+        let ui_lang = self.ui_lang;
+        let Some(actor) = &self.actor else {
+            ui.label(ty(ui_lang, "No actor loaded."));
+            return;
+        };
+        let name = actor.get_name();
+        let mut editable: Vec<(String, Option<usize>)> = Vec::new();
+        for link in actor.pack.link_file_names() {
+            let tab = LINK_TO_TAB
+                .iter()
+                .find(|(_, l)| *l == &link)
+                .map(|(t, _)| *t);
+            editable.push((Self::link_display_path(actor, &link), tab));
+        }
+        editable.sort_by(|a, b| a.0.cmp(&b.0));
+        let misc: Vec<(String, usize)> = actor
+            .pack
+            .misc_paths()
+            .iter()
+            .map(|p| (p.clone(), actor.pack.misc_size(p)))
+            .collect();
+
+        ui.vertical(|ui| {
+            ui.label(RichText::new(format!("{name}.sbactorpack")).strong());
+            ui.label(
+                RichText::new(format!("Actor/Pack/{name}.sbactorpack"))
+                    .small()
+                    .weak(),
+            );
+            ui.separator();
+            for (path, tab) in &editable {
+                let sel = tab.map(|t| self.tab == t).unwrap_or(false);
+                if ui.selectable_label(sel, path).clicked() {
+                    if let Some(t) = tab {
+                        self.switch_tab(*t);
+                    }
+                }
+            }
+            if !misc.is_empty() {
+                ui.add_space(4.0);
+                ui.label(
+                    RichText::new(ty(ui_lang, "Read-only")).small().weak(),
+                );
+                for (p, size) in &misc {
+                    let sel = self.misc_view.as_ref().map(|(mp, _)| mp == p).unwrap_or(false)
+                        && self.tab == 28;
+                    if ui.selectable_label(sel, p).clicked() {
+                        self.misc_view = Some((p.clone(), *size));
+                        self.tab = 28;
+                    }
+                }
+                ui.separator();
+            }
+            ui.add_space(4.0);
+            ui.label(RichText::new(ty(ui_lang, "Global")).small().weak());
+            if ui
+                .selectable_label(self.tab == 26, "Actor/ActorInfo.product.sbyml")
+                .clicked()
+            {
+                self.switch_tab(26);
+            }
+            if ui
+                .selectable_label(self.tab == 27, "Pack/Bootup.pack")
+                .clicked()
+            {
+                self.switch_tab(27);
+            }
+        });
+    }
+
+    /// Read-only view of a non-editable pack file (physics/cloth/AS/misc).
+    fn show_misc_view(&mut self, ui: &mut egui::Ui) {
+        let ui_lang = self.ui_lang;
+        if let Some((path, size)) = &self.misc_view {
+            ui.label(RichText::new(path).strong());
+            ui.add_space(6.0);
+            ui.label(format!("{}: {} bytes", ty(ui_lang, "Size"), size));
+            ui.add_space(4.0);
+            ui.label(
+                ty(ui_lang, "This file is not editable — it is kept as-is when saving."),
+            );
+        } else {
+            ui.label(ty(ui_lang, "Select a file on the left."));
+        }
+    }
+
     fn on_open_vanilla(&mut self) {
         let ui_lang = self.ui_lang;
         let dir = PathBuf::from(self.settings.update());
@@ -1542,6 +1669,7 @@ impl App {
             25 => self.show_texts(ui),
             26 => self.show_actor_info(ui),
             27 => self.show_flags(ui),
+            28 => self.show_misc_view(ui),
             i => match LINK_TO_TAB.iter().find(|(t, _)| *t == i) {
                 Some((_, link)) if NOT_IMPLEMENTED.contains(link) => {
                     ui.label(format!(
@@ -2420,6 +2548,21 @@ impl App {
                         });
                     panel.platform = if p == 0 { "wiiu".into() } else { "switch".into() };
                 });
+                ui.horizontal(|ui| {
+                    ui.label(ty(ui_lang, "View Mode"));
+                    let mut m = if panel.view_mode == "file" { 0 } else { 1 };
+                    egui::ComboBox::from_id_salt("view_mode")
+                        .selected_text(if m == 0 {
+                            ty(ui_lang, "File view")
+                        } else {
+                            ty(ui_lang, "Feature view")
+                        })
+                        .show_ui(ui, |ui| {
+                            ui.selectable_value(&mut m, 0, ty(ui_lang, "File view"));
+                            ui.selectable_value(&mut m, 1, ty(ui_lang, "Feature view"));
+                        });
+                    panel.view_mode = if m == 0 { "file".into() } else { "feature".into() };
+                });
                 let is_switch = panel.platform == "switch";
                 let (gkey, ukey, dkey) = if is_switch {
                     ("Switch Game Directory", "Switch Update Directory", "Switch DLC Directory")
@@ -2509,6 +2652,7 @@ impl App {
                     if ui.button(ty(ui_lang, "Accept")).clicked() {
                         let test = Settings {
                             platform: panel.platform.clone(),
+                            view_mode: panel.view_mode.clone(),
                             game_dir: panel.game_dir.clone(),
                             update_dir: panel.update_dir.clone(),
                             dlc_dir: panel.dlc_dir.clone(),

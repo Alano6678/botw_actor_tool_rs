@@ -7,6 +7,10 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Settings {
+    /// UI layout mode for the left sidebar: "file" (list files) or
+    /// "feature" (the feature tabs). Defaults to file view.
+    #[serde(default = "default_view_mode")]
+    pub view_mode: String,
     /// Which platform the editor targets: "wiiu" (big-endian) or "switch".
     #[serde(default = "default_platform")]
     pub platform: String,
@@ -50,6 +54,10 @@ fn default_platform() -> String {
     "wiiu".to_string()
 }
 
+fn default_view_mode() -> String {
+    "file".to_string()
+}
+
 fn default_lang() -> String {
     "USen".to_string()
 }
@@ -57,6 +65,7 @@ fn default_lang() -> String {
 impl Default for Settings {
     fn default() -> Self {
         Settings {
+            view_mode: default_view_mode(),
             platform: default_platform(),
             game_dir: String::new(),
             update_dir: String::new(),
@@ -122,6 +131,11 @@ impl Settings {
     /// Is the current platform Switch (little-endian)?
     pub fn is_switch(&self) -> bool {
         self.platform == "switch"
+    }
+
+    /// Is the left sidebar in "file view" (list files) vs "feature view"?
+    pub fn is_file_view(&self) -> bool {
+        self.view_mode == "file"
     }
 
     /// Active game directory for the current platform.

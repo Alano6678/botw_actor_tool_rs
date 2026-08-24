@@ -48,6 +48,17 @@ pub fn tr(lang: UiLang, key: &str) -> &str {
         "Open Mod Actor (Wii U)\tCtrl+O" => "打开 Mod Actor（Wii U）\tCtrl+O",
         "Open Mod Actor (Switch)\tCtrl+Shift+O" => "打开 Mod Actor（Switch）\tCtrl+Shift+O",
         "Platform" => "平台",
+        "View Mode" => "视图模式",
+        "File view" => "文件视图",
+        "Feature view" => "功能视图",
+        "Read-only" => "只读",
+        "Size" => "大小",
+        "Global" => "全局",
+        "No actor loaded." => "未加载 Actor。",
+        "Select a file on the left." => "请在左侧选择一个文件。",
+        "This file is not editable — it is kept as-is when saving." => {
+            "此文件不可编辑——保存时按原样保留。"
+        }
         "Save Actor\tCtrl+S" => "保存 Actor\tCtrl+S",
         "Quit\tCtrl+Q" => "退出\tCtrl+Q",
         "Edit" => "编辑",

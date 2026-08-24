@@ -299,6 +299,26 @@ impl ActorPack {
         self.tags.join(", ")
     }
 
+    /// Names of the editable link files (link names) available in the pack.
+    pub fn link_file_names(&self) -> Vec<String> {
+        let mut v: Vec<String> = self.aampfiles.keys().cloned().collect();
+        v.extend(self.bymlfiles.keys().cloned());
+        v
+    }
+
+    /// Paths of the non-editable files kept as-is inside the pack
+    /// (e.g. `Physics/Cloth/...hkcl`, `Actor/AS/...bas`).
+    pub fn misc_paths(&self) -> Vec<String> {
+        let mut v: Vec<String> = self.miscfiles.keys().cloned().collect();
+        v.sort();
+        v
+    }
+
+    /// Size in bytes of a misc (non-editable) file.
+    pub fn misc_size(&self, path: &str) -> usize {
+        self.miscfiles.get(path).map(|d| d.len()).unwrap_or(0)
+    }
+
     pub fn set_tags(&mut self, tags: &str) {
         self.tags = tags.split(", ").map(|s| s.to_string()).collect();
     }
